@@ -1,0 +1,17 @@
+{{!
+    ZEAL — Shown to the assessor when AI credits are exhausted.
+
+    Context keys:
+      manual_grading_url   string  — URL back to the standard Moodle grading page
+}}
+<div class="zeal-credits-exhausted card border-danger mb-4">
+    <div class="card-header bg-danger text-white">
+        <h4 class="mb-0">{{#str}} no_credits_heading, local_ajananova {{/str}}</h4>
+    </div>
+    <div class="card-body">
+        <p>{{#str}} no_credits_body, local_ajananova {{/str}}</p>
+        <a href="{{manual_grading_url}}" class="btn btn-secondary">
+            {{#str}} continue_manual_grading, local_ajananova {{/str}}
+        </a>
+    </div>
+</div>

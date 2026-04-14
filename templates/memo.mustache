@@ -1,0 +1,63 @@
+{{!
+    AjanaNova Grader — per-assignment marking guide upload page.
+
+    Context keys supplied by memo.php:
+      cmid                  int
+      assignment_name       string
+      post_url              string
+      sesskey               string
+      draftitemid           int
+      has_advanced_grading  bool  — true if rubric or marking guide is configured
+      grading_method        string — 'rubric' | 'guide' | ''
+      back_url              string
+}}
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4 class="mb-0">
+            &#127775; {{#str}} memo_page_title, local_ajananova {{/str}}
+            <small class="text-muted fw-normal ms-2">— {{assignment_name}}</small>
+        </h4>
+    </div>
+    <div class="card-body">
+
+        {{#has_advanced_grading}}
+        <div class="alert alert-success" role="alert">
+            <strong>&#10003; {{#str}} memo_rubric_active, local_ajananova {{/str}}</strong>
+            {{#str}} memo_rubric_active_desc, local_ajananova {{/str}}
+        </div>
+        {{/has_advanced_grading}}
+
+        {{^has_advanced_grading}}
+        <div class="alert alert-info" role="alert">
+            {{#str}} memo_no_rubric, local_ajananova {{/str}}
+        </div>
+        {{/has_advanced_grading}}
+
+        <p>{{#str}} memo_upload_intro, local_ajananova {{/str}}</p>
+
+        <form method="post" action="{{{post_url}}}">
+            <input type="hidden" name="sesskey" value="{{sesskey}}">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">
+                    {{#str}} marking_guide_upload, local_ajananova {{/str}}
+                </label>
+                {{{filemanager}}}
+                <div class="form-text text-muted">
+                    {{#str}} marking_guide_upload_note, local_ajananova {{/str}}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">
+                    {{#str}} memo_save_button, local_ajananova {{/str}}
+                </button>
+                <a href="{{{back_url}}}" class="btn btn-outline-secondary">
+                    {{#str}} memo_back_button, local_ajananova {{/str}}
+                </a>
+            </div>
+        </form>
+
+    </div>
+</div>

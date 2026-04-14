@@ -1,0 +1,20 @@
+{
+    "name": "ajananova/local-ajananova",
+    "description": "AjanaNova Grader — Moodle local plugin",
+    "type": "moodle-plugin",
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": ">=8.0",
+        "smalot/pdfparser": "^2.0",
+        "setasign/fpdi": "^2.3",
+        "tecnickcom/tcpdf": "^6.6"
+    },
+    "autoload": {
+        "psr-4": {}
+    },
+    "config": {
+        "vendor-dir": "vendor",
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}
