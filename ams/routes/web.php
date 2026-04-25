@@ -14,6 +14,9 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class, 'login']);
 });
 
+Route::middleware('auth')->get('/api/saqa-lookup', [QualificationModuleController::class, 'lookupJson'])
+    ->name('api.saqa-lookup');
+
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 

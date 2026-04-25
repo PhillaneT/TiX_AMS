@@ -11,6 +11,18 @@ use Illuminate\Http\Request;
 
 class QualificationModuleController extends Controller
 {
+    public function lookupJson(Request $request)
+    {
+        $request->validate(['saqa_id' => ['required', 'string', 'regex:/^\d+$/']]);
+        $result = SaqaFetcher::fetch(trim($request->saqa_id));
+
+        if (!$result['ok']) {
+            return response()->json(['ok' => false, 'error' => $result['error']], 422);
+        }
+
+        return response()->json(['ok' => true, 'data' => $result['data']]);
+    }
+
     public function index(Qualification $qualification)
     {
         $modules     = $qualification->modules()->with('assignments')->get();

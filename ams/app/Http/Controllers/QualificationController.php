@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\Qualification;
+use App\Models\QualificationModule;
 use Illuminate\Http\Request;
 
 class QualificationController extends Controller
@@ -38,8 +39,34 @@ class QualificationController extends Controller
         $qual = Qualification::create($data);
         AuditLog::record('qualification.created', $qual);
 
+        // Import modules if SAQA fetch was done on the create form
+        $modulesJson = $request->input('_fetched_modules');
+        $moduleCount = 0;
+        if ($modulesJson) {
+            $modules = json_decode($modulesJson, true);
+            if (is_array($modules) && count($modules)) {
+                foreach ($modules as $i => $mod) {
+                    QualificationModule::create([
+                        'qualification_id' => $qual->id,
+                        'module_type'      => $mod['module_type'] ?? 'KM',
+                        'module_code'      => $mod['module_code'] ?? '',
+                        'title'            => $mod['title'] ?? '',
+                        'nqf_level'        => $mod['nqf_level'] ?? '',
+                        'credits'          => (int)($mod['credits'] ?? 0),
+                        'sortorder'        => (int)($mod['sortorder'] ?? $i),
+                    ]);
+                }
+                $moduleCount = count($modules);
+                $qual->update(['saqa_fetched_at' => now()]);
+            }
+        }
+
+        $message = $moduleCount
+            ? "Qualification created with {$moduleCount} module(s) imported from SAQA."
+            : 'Qualification created.';
+
         return redirect()->route('qualifications.show', $qual)
-            ->with('success', 'Qualification created.');
+            ->with('success', $message);
     }
 
     public function show(Qualification $qualification)
