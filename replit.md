@@ -1,57 +1,98 @@
-# AjanaNova Grader
+# AjanaNova — Moodle Plugin + Assessor Management System (AMS)
 
-## Overview
+This repo holds two related products:
 
-AjanaNova Grader (`local_ajananova`) is a **Moodle local plugin** that adds AI-assisted assessment marking, credit-based billing, and PDF annotation to a Moodle 4.1+ site. It is **not** a standalone web application — it is designed to be installed inside an existing Moodle instance at `<moodle>/local/ajananova/`.
+1. **AjanaNova Grader** (`local_ajananova`) — the existing Moodle local plugin. Untouched.
+2. **AjanaNova AMS** — a new standalone web application (being built here) that gives assessors who *don't* use Moodle the same AI-marking power, plus a per-cohort gradebook, learner management, and assessor-controlled email delivery of locked annotated PDFs.
 
-- Language: PHP 8.2
-- Package manager: Composer (`composer.json` / `composer.lock`)
-- Plugin type: Moodle local plugin
-- License: GPL-3.0-or-later
+The AMS reuses the plugin's PHP AI/PDF code (prompt builder, Anthropic client, PDF extractor, PDF annotator) by porting it out of Moodle dependencies into framework-agnostic classes.
 
-## Replit setup
+---
 
-Because the plugin's PHP files all bootstrap Moodle (`require_once(__DIR__ . '/../../config.php');` and `defined('MOODLE_INTERNAL') || die();`), they cannot render outside a Moodle install. To make the project meaningfully browsable in the Replit preview, a developer overview page (`index.php`) is served by PHP's built-in web server.
+## AMS — Web Application
 
-- Workflow: `Server` runs `php -S 0.0.0.0:5000 -t .` on port 5000 (webview output).
-- `index.php` parses `version.php`, `composer.json`, `settings.php`, and `db/install.xml` to render plugin metadata, configurable settings, and the database schema.
-- `index.php` is gated on `!defined('MOODLE_INTERNAL')` so it is inert inside a real Moodle install.
+### Stack
+- PHP 8.2 + Laravel (chosen per `attached_assets/AJANANOVA_HANDOVER_*.md` §5).
+- PostgreSQL (Replit built-in).
+- Existing Composer libs reused: `smalot/pdfparser`, `setasign/fpdi`, `tecnickcom/tcpdf`.
+- Server: Laravel `artisan serve` on `0.0.0.0:5000`.
 
-## Project layout
+### v1 scope (in build now)
+1. Assessor login (single tenant for now).
+2. **Qualification → Cohort → Learner** hierarchy with always-visible "currently assessing" context badge.
+3. **CSV learner import** — assessor downloads a template, fills it, uploads once per cohort. Validates and stores.
+4. Assignment + memo per qualification (text paste / criteria list / PDF upload — same three-tier pattern as the Moodle plugin).
+5. Single OR bulk submission upload.
+6. **AI-assisted file→learner matching** on bulk upload — model reads the first page of each PDF and proposes the matching learner from the cohort roster; assessor confirms.
+7. Grade now OR queue for later (in-process queue worker).
+8. AI marking (mock mode default; real Anthropic when key is set — same key as Moodle plugin).
+9. Review & edit screen — editable per-question feedback, constructive-only enforcement (warn on negative phrasing patterns).
+10. Sign-off → produces:
+    - **Locked annotated PDF** (red ticks/crosses on the submission — owner password + permissions flags blocking edit/copy/annotate).
+    - **Cover-page feedback letter** (clean per-question summary the learner reads first).
+    - SHA-256 hash of the final PDF stored for tamper evidence.
+11. Email PDF + cover letter to learner from inside the AMS; copy stored against the submission.
+12. Cohort gradebook view (learners × assignments × scores), CSV/PDF export.
+13. Audit log of every action (who, what, when, IP).
+14. Compliance baselines from day one even if features come later:
+    - 5-year retention (soft-delete only).
+    - `track` field on every qualification (`legacy_seta` | `qcto_occupational`).
+    - Personal-info fields kept separate (encrypted-at-rest where applicable) for future POPIA compliance.
 
-- `version.php` — Moodle plugin metadata (component, version, requires, maturity).
-- `lib.php` — Moodle navigation/settings hook callbacks.
-- `settings.php` — Admin settings (mock mode, Anthropic API key, licence key, credit costs).
-- `memo.php` / `mark.php` — Assessor-facing pages reached from the assignment gear menu.
-- `db/install.xml` — Database schema for three tables: `ajananova_ai_usage`, `ajananova_marking_results`, `ajananova_client_credits`.
-- `db/hooks.php` — Registers the `before_footer_html_generation` hook listener (Moodle 4.3+).
-- `classes/` — Auto-loaded namespaced classes:
-  - `ai/` — Anthropic client, mock client, prompt builder, marking engine.
-  - `billing/` — Credit manager and usage logger.
-  - `grading/` — Marking criteria reader.
-  - `output/` — Marking review renderer.
-  - `pdf/` — PDF text extractor and annotator (uses `smalot/pdfparser`, `setasign/fpdi`, `tecnickcom/tcpdf`).
-  - `hook_listener.php` — Injects the floating "Mark with AI" button.
-- `lang/en/local_ajananova.php` — English language strings.
-- `templates/` — Mustache templates for the marking review, memo upload, and credits-exhausted screens.
-- `index.php` — Replit-only landing page (NOT shipped with the plugin into Moodle).
+### v2 backlog (deferred, not lost)
+- **Interactive PDF annotation editor.** After AI grading, assessor opens a per-question view showing the learner's text with the AI's red ticks/crosses inline. They can:
+  - Edit or delete any AI-placed tick/cross.
+  - Add new ticks/crosses from a stamp/edit toolbar (drag-to-place).
+  - See an "annotations per question" summary view per assignment.
+- Moderator workflow + sign-off (US 115759 / ASSMT02).
+- 25% formative / 100% summative moderation gating before SOR.
+- VACS sufficiency checker (flag incomplete criteria coverage).
+- POE bundle generation in the web app (already in Moodle plugin).
+- SOR generation (QCTO format).
+- Cohort analytics dashboard (pass rates, weak criteria, time-to-mark).
+- Multi-assessor admin + role permissions.
+- Multi-tenant client onboarding + PayFast billing + invoices (per handover doc §5–7).
+- POPIA Operator Agreement workflow + Information Officer registration.
+- Assessor/moderator registration certificate storage + expiry alerts.
 
-## Composer dependencies
+### Decisions logged (Session 3, 2026-04-25)
+| Decision | Answer |
+|---|---|
+| Learner authentication | None. Assessor downloads PDF, AMS emails it. |
+| Where scores live | Per cohort/class inside AMS (gradebook view, future analytics). |
+| PDF format to learner | Locked PDF (no edit/copy/annotate) + cover-page feedback letter. |
+| Anthropic API key | Reuse the one already working in the Moodle plugin. |
+| SMTP provider | None yet. Use Laravel `log` mail driver in dev; pick a provider before pilot. |
+| SA ID numbers | Not stored in v1 web app. (Stored on Moodle side already.) |
+| Bulk upload matching | CSV-imported roster + AI-assisted file→learner matching with assessor confirm. |
+| Stack | Laravel + PostgreSQL (PHP, reuses Moodle plugin code). |
 
+### Project layout (AMS — created during build)
+- `app/`, `bootstrap/`, `config/`, `database/`, `resources/`, `routes/`, `public/` — standard Laravel.
+- `app/Services/Ai/` — ported `PromptBuilder`, `AnthropicClient`, `MockClient` from the Moodle plugin.
+- `app/Services/Pdf/` — ported `Extractor`, `Annotator` (with new locking step).
+
+---
+
+## Moodle Plugin (unchanged — reference only)
+
+`local_ajananova` is a Moodle 4.1+ local plugin that adds AI-assisted marking inside an existing Moodle install at `<moodle>/local/ajananova/`. Its files (`version.php`, `lib.php`, `settings.php`, `mark.php`, `memo.php`, `db/install.xml`, `classes/ai|billing|grading|output|pdf/`, `lang/`, `templates/`) all bootstrap Moodle and cannot run standalone. The Replit landing page (`index.php`, gated on `!defined('MOODLE_INTERNAL')`) renders plugin metadata for browsing.
+
+### Composer dependencies (shared with AMS)
 - `smalot/pdfparser` ^2.0 — extract text from learner submission PDFs.
 - `setasign/fpdi` ^2.3 — import existing PDFs as templates.
 - `tecnickcom/tcpdf` ^6.6 — write annotated PDFs.
 
-Install with `composer install`.
-
-## Installing into Moodle
-
-1. Copy the directory to `<moodle>/local/ajananova/`.
-2. Run `composer install` inside the plugin directory.
-3. Visit `Site administration → Notifications` to install the database tables.
+### Installing the plugin into Moodle
+1. Copy `local/ajananova/` contents to `<moodle>/local/ajananova/`.
+2. Run `composer install` inside that directory.
+3. Visit `Site administration → Notifications` to install tables.
 4. Configure under `Site administration → Plugins → Local plugins → AjanaNova Grader`. Mock mode is on by default.
-5. Open any assignment as an assessor; the gear menu now shows *AjanaNova: Upload marking guide* and *AjanaNova: Mark with AI*.
+5. Open any assignment as an assessor; the gear menu shows *AjanaNova: Upload marking guide* and *AjanaNova: Mark with AI*.
+
+---
 
 ## User preferences
-
-None recorded yet.
+- Build for speed over polish in v1 — get something the user can pilot ASAP.
+- Defer compliance features that aren't blocking pilot use, but don't lose them.
+- Plain-language updates — minimal jargon.
