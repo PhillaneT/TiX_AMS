@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LearnerController;
 use App\Http\Controllers\QualificationController;
 use App\Http\Controllers\QualificationModuleController;
+use App\Http\Controllers\SubmissionController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -68,6 +69,22 @@ Route::middleware('auth')->group(function () {
             Route::post('learners/import', [LearnerController::class, 'import'])->name('learners.import.store');
             Route::delete('learners/{learner}', [LearnerController::class, 'destroy'])->name('learners.destroy');
             Route::get('learners/{learner}/poe', [LearnerController::class, 'poe'])->name('learners.poe');
+
+            // Submissions (per learner)
+            Route::prefix('learners/{learner}')->name('learners.')->group(function () {
+                Route::post('submissions', [SubmissionController::class, 'store'])
+                    ->name('submissions.store');
+                Route::get('submissions/{submission}', [SubmissionController::class, 'show'])
+                    ->name('submissions.show');
+                Route::post('submissions/{submission}/mark', [SubmissionController::class, 'mark'])
+                    ->name('submissions.mark');
+                Route::post('submissions/{submission}/signoff', [SubmissionController::class, 'signOff'])
+                    ->name('submissions.signoff');
+                Route::post('submissions/{submission}/reopen', [SubmissionController::class, 'reopen'])
+                    ->name('submissions.reopen');
+                Route::delete('submissions/{submission}', [SubmissionController::class, 'destroy'])
+                    ->name('submissions.destroy');
+            });
         });
     });
 
