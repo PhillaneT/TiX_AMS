@@ -243,7 +243,10 @@
 
                                 {{-- === Marked / awaiting sign-off === --}}
                                 @elseif(in_array($subStatus, ['review_required', 'marking', 'queued']))
-                                    @php $badge = $sub->statusBadge(); @endphp
+                                    @php
+                                        $badge     = $sub->statusBadge();
+                                        $replaceId = 'replace-form-' . $asgn->id;
+                                    @endphp
                                     <div class="flex items-center gap-2 flex-wrap">
                                         <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ $badge['class'] }}">{{ $badge['label'] }}</span>
                                         @if($sub->markingResult)
@@ -257,10 +260,37 @@
                                            class="no-print text-xs bg-orange-600 hover:bg-orange-700 text-white font-semibold px-3 py-1 rounded transition">
                                             Review &amp; Sign Off →
                                         </a>
+                                        <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
+                                                class="no-print text-xs text-gray-400 hover:text-gray-700 border border-gray-300 px-2 py-0.5 rounded transition">
+                                            Replace file
+                                        </button>
+                                    </div>
+                                    {{-- Re-upload form (hidden by default) --}}
+                                    <div id="{{ $replaceId }}" class="hidden mt-2 no-print">
+                                        <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-1.5">
+                                            Replacing will delete the current submission and marking result. You will need to run AI Marking again.
+                                        </div>
+                                        <form method="POST" enctype="multipart/form-data"
+                                              action="{{ route('qualifications.cohorts.learners.submissions.store', [$qualification, $cohort, $learner]) }}">
+                                            @csrf
+                                            <input type="hidden" name="assignment_id" value="{{ $asgn->id }}">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <input type="file" name="submission_file" required
+                                                       accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.zip,.odt"
+                                                       class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 flex-1 min-w-0">
+                                                <button type="submit"
+                                                        class="text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold px-3 py-1 rounded transition shrink-0">
+                                                    Replace
+                                                </button>
+                                                <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
+                                                        class="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
+                                            </div>
+                                        </form>
                                     </div>
 
                                 {{-- === Signed off === --}}
                                 @elseif($subStatus === 'signed_off')
+                                    @php $replaceId = 'replace-signed-' . $asgn->id; @endphp
                                     <div class="flex items-center gap-2 flex-wrap">
                                         <span class="text-xs font-bold {{ $verdict === 'COMPETENT' ? 'text-green-700' : 'text-red-700' }}">
                                             {{ $verdict === 'COMPETENT' ? '✓ COMPETENT' : '✗ NOT YET COMPETENT' }}
@@ -268,6 +298,32 @@
                                         <span class="text-xs text-gray-400">signed {{ $sub->signed_off_at?->format('d M Y') }}</span>
                                         <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
                                            class="no-print text-xs text-blue-600 hover:underline">View</a>
+                                        <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
+                                                class="no-print text-xs text-gray-400 hover:text-gray-700 border border-gray-300 px-2 py-0.5 rounded transition">
+                                            Re-submit
+                                        </button>
+                                    </div>
+                                    {{-- Re-upload form for signed-off (hidden by default) --}}
+                                    <div id="{{ $replaceId }}" class="hidden mt-2 no-print">
+                                        <div class="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mb-1.5">
+                                            This will reopen the signed-off result and require re-marking. Use only for genuine resubmissions.
+                                        </div>
+                                        <form method="POST" enctype="multipart/form-data"
+                                              action="{{ route('qualifications.cohorts.learners.submissions.store', [$qualification, $cohort, $learner]) }}">
+                                            @csrf
+                                            <input type="hidden" name="assignment_id" value="{{ $asgn->id }}">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <input type="file" name="submission_file" required
+                                                       accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.zip,.odt"
+                                                       class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 flex-1 min-w-0">
+                                                <button type="submit"
+                                                        class="text-xs bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-1 rounded transition shrink-0">
+                                                    Re-submit &amp; Reopen
+                                                </button>
+                                                <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
+                                                        class="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
+                                            </div>
+                                        </form>
                                     </div>
                                 @else
                                     <span class="text-xs text-gray-400">{{ ucfirst(str_replace('_', ' ', $subStatus ?? '')) }}</span>
