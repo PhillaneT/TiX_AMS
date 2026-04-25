@@ -29,15 +29,16 @@ class SubmissionController extends Controller
 
         $assignmentId = $request->integer('assignment_id');
 
-        // One submission per learner per assignment (upsert — delete old file first)
-        $existing = Submission::where('assignment_id', $assignmentId)
+        // One submission per learner per assignment — find even soft-deleted rows and wipe them
+        $existing = Submission::withTrashed()
+            ->where('assignment_id', $assignmentId)
             ->where('learner_id', $learner->id)
             ->first();
 
         if ($existing) {
             Storage::delete($existing->file_path);
-            $existing->markingResult?->delete();
-            $existing->delete();
+            $existing->markingResult?->forceDelete();
+            $existing->forceDelete();
         }
 
         $file = $request->file('submission_file');
