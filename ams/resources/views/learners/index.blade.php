@@ -64,12 +64,18 @@
                         </span>
                     </td>
                     <td class="px-5 py-3 text-right">
-                        <form method="POST" action="{{ route('qualifications.cohorts.learners.destroy', [$qualification, $cohort, $learner]) }}"
-                            onsubmit="return confirm('Remove {{ addslashes($learner->full_name) }}?')" class="inline">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="text-xs text-red-400 hover:text-red-600">Remove</button>
-                        </form>
+                        <div class="flex items-center justify-end gap-3">
+                            <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}"
+                               class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                                POE Profile
+                            </a>
+                            <form method="POST" action="{{ route('qualifications.cohorts.learners.destroy', [$qualification, $cohort, $learner]) }}"
+                                onsubmit="return confirm('Remove {{ addslashes($learner->full_name) }}?')" class="inline">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-xs text-red-400 hover:text-red-600">Remove</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 @endforeach

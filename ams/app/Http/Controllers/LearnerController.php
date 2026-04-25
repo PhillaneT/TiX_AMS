@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Cohort;
 use App\Models\Learner;
 use App\Models\Qualification;
+use App\Models\Submission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -117,6 +118,89 @@ class LearnerController extends Controller
         return redirect()
             ->route('qualifications.cohorts.learners.index', [$qualification, $cohort])
             ->with('success', $msg);
+    }
+
+    public function poe(Qualification $qualification, Cohort $cohort, Learner $learner)
+    {
+        abort_if($learner->cohort_id !== $cohort->id, 404);
+
+        // Load all modules for this qualification with their assignments
+        $modules = $qualification->modules()
+            ->with(['assignments' => fn($q) => $q->withCount('submissions')])
+            ->get();
+
+        // Load all of this learner's submissions for this qualification's assignments
+        $assignmentIds = $qualification->assignments()->pluck('id');
+        $submissionsByAssignment = Submission::with('markingResult')
+            ->where('learner_id', $learner->id)
+            ->whereIn('assignment_id', $assignmentIds)
+            ->get()
+            ->keyBy('assignment_id');
+
+        // Build per-module status
+        $moduleStatuses = [];
+        foreach ($modules as $mod) {
+            $assignedAssignments = $mod->assignments;
+            if ($assignedAssignments->isEmpty()) {
+                $moduleStatuses[$mod->id] = [
+                    'status'      => 'unmapped',
+                    'label'       => 'Not mapped',
+                    'assignments' => [],
+                ];
+                continue;
+            }
+
+            $verdicts    = [];
+            $assignments = [];
+            foreach ($assignedAssignments as $asgn) {
+                $sub = $submissionsByAssignment[$asgn->id] ?? null;
+                $verdict = null;
+                $submissionStatus = null;
+                if ($sub) {
+                    $submissionStatus = $sub->status;
+                    $verdict = $sub->markingResult?->final_verdict;
+                }
+                $assignments[] = [
+                    'assignment'       => $asgn,
+                    'submission'       => $sub,
+                    'submission_status' => $submissionStatus,
+                    'verdict'          => $verdict,
+                ];
+                if ($verdict) {
+                    $verdicts[] = $verdict;
+                }
+            }
+
+            $totalRequired = $assignedAssignments->count();
+            $competentCount = count(array_filter($verdicts, fn($v) => $v === 'COMPETENT'));
+            $nycCount       = count(array_filter($verdicts, fn($v) => $v === 'NOT_YET_COMPETENT'));
+
+            if ($nycCount > 0) {
+                $status = 'NYC';
+                $label  = 'Not Yet Competent';
+            } elseif ($competentCount === $totalRequired) {
+                $status = 'C';
+                $label  = 'Competent';
+            } elseif ($competentCount > 0) {
+                $status = 'partial';
+                $label  = "Partial ({$competentCount}/{$totalRequired})";
+            } else {
+                $status = 'pending';
+                $label  = 'Pending';
+            }
+
+            $moduleStatuses[$mod->id] = [
+                'status'      => $status,
+                'label'       => $label,
+                'assignments' => $assignments,
+            ];
+        }
+
+        AuditLog::record('learner.poe_viewed', $learner, ['qualification_id' => $qualification->id]);
+
+        return view('learners.poe', compact(
+            'qualification', 'cohort', 'learner', 'modules', 'moduleStatuses'
+        ));
     }
 
     public function destroy(Qualification $qualification, Cohort $cohort, Learner $learner)

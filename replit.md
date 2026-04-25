@@ -55,6 +55,34 @@ The AMS reuses the plugin's PHP AI/PDF code (prompt builder, Anthropic client, P
 - POPIA Operator Agreement workflow + Information Officer registration.
 - Assessor/moderator registration certificate storage + expiry alerts.
 
+### Session 4 additions (2026-04-25) — SAQA Module Mapping + Learner POE Profile
+
+**New tables:**
+- `qualification_modules` — KM/PM/WM/US/MOD modules per qualification (fetched from SAQA or added manually). Fields: qualification_id, module_type, module_code, title, nqf_level, credits, sortorder.
+- `assignment_modules` — pivot: which assignment(s) assess each qualification module.
+- `qualifications.saqa_raw_data` (JSON) + `saqa_fetched_at` — stores full SAQA API response for audit.
+
+**New service:** `app/Services/SaqaFetcher.php` — standalone port of the Moodle plugin's `saqa_fetcher` class. Scrapes `regqs.saqa.org.za`. Handles KM/PM/WM (QCTO), Unit Standards (legacy SETA), and generic prose modules (HEQSF).
+
+**New controller:** `QualificationModuleController` — SAQA fetch → store modules, module-to-assignment mapping (checkbox UI), manual add, delete module.
+
+**New routes:**
+- `GET /qualifications/{qual}/modules` — module management page
+- `POST /qualifications/{qual}/modules/fetch-saqa` — fetch from SAQA and replace modules
+- `POST /qualifications/{qual}/modules/save-mapping` — save assignment mappings
+- `POST /qualifications/{qual}/modules/add` — manual module
+- `DELETE /qualifications/{qual}/modules/{module}` — remove module
+- `GET /qualifications/{qual}/cohorts/{cohort}/learners/{learner}/poe` — learner POE profile
+
+**Learner POE profile** (`learners/poe.blade.php`):
+- Shows all qualification modules in order
+- Per module: which assignments assess it, the learner's submission status, and C/NYC verdict
+- Module-level result: C (all assignments C), NYC (any assignment NYC), or Pending
+- Summary counts + printable assessor declaration block
+- Print → PDF button (browser print)
+
+**Decision:** SAQA fetch is done at qualification level (not per cohort). All cohorts under the same qualification share the same module list. Assignment-to-module mapping is also per qualification.
+
 ### Decisions logged (Session 3, 2026-04-25)
 | Decision | Answer |
 |---|---|

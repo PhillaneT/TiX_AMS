@@ -6,6 +6,7 @@ use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LearnerController;
 use App\Http\Controllers\QualificationController;
+use App\Http\Controllers\QualificationModuleController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -22,6 +23,20 @@ Route::middleware('auth')->group(function () {
     Route::resource('qualifications', QualificationController::class);
 
     Route::prefix('qualifications/{qualification}')->name('qualifications.')->group(function () {
+
+        // Qualification modules — SAQA fetch + assignment mapping
+        Route::get('modules', [QualificationModuleController::class, 'index'])
+            ->name('modules.index');
+        Route::post('modules/fetch-saqa', [QualificationModuleController::class, 'fetchSaqa'])
+            ->name('modules.fetch-saqa');
+        Route::post('modules/save-mapping', [QualificationModuleController::class, 'saveMapping'])
+            ->name('modules.save-mapping');
+        Route::post('modules/add', [QualificationModuleController::class, 'addModule'])
+            ->name('modules.add');
+        Route::delete('modules/{module}', [QualificationModuleController::class, 'destroyModule'])
+            ->name('modules.destroy');
+
+        // Cohorts
         Route::resource('cohorts', CohortController::class)
             ->names([
                 'index'   => 'cohorts.index',
@@ -38,6 +53,7 @@ Route::middleware('auth')->group(function () {
             Route::get('learners/import', [LearnerController::class, 'importForm'])->name('learners.import');
             Route::post('learners/import', [LearnerController::class, 'import'])->name('learners.import.store');
             Route::delete('learners/{learner}', [LearnerController::class, 'destroy'])->name('learners.destroy');
+            Route::get('learners/{learner}/poe', [LearnerController::class, 'poe'])->name('learners.poe');
         });
     });
 

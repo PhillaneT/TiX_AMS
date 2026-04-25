@@ -30,4 +30,9 @@ class Assignment extends Model
     {
         return $this->hasMany(Submission::class);
     }
+
+    public function qualificationModules()
+    {
+        return $this->belongsToMany(QualificationModule::class, 'assignment_modules');
+    }
 }

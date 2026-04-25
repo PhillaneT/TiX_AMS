@@ -20,6 +20,13 @@ class Qualification extends Model
         'seta_registration_number',
         'status',
         'notes',
+        'saqa_raw_data',
+        'saqa_fetched_at',
+    ];
+
+    protected $casts = [
+        'saqa_raw_data'  => 'array',
+        'saqa_fetched_at' => 'datetime',
     ];
 
     public function cohorts()
@@ -30,6 +37,11 @@ class Qualification extends Model
     public function assignments()
     {
         return $this->hasMany(Assignment::class);
+    }
+
+    public function modules()
+    {
+        return $this->hasMany(QualificationModule::class)->orderBy('sortorder');
     }
 
     public function trackLabel(): string
