@@ -319,35 +319,115 @@ class SubmissionController extends Controller
             return [['text' => 'General competency assessment', 'max_marks' => $totalMarks]];
         }
 
-        // Try to find numbered lines: "1.", "1)", "Q1.", etc.
-        preg_match_all('/(?:^|\n)\s*(?:\d+[\.\)]|Q\d+\.?)\s*(.+)/i', $text, $matches);
-        $lines = array_filter(array_map('trim', $matches[1] ?? []));
+        $rawLines = array_values(array_filter(
+            array_map('trim', explode("\n", $text)),
+            fn($l) => $l !== ''
+        ));
 
-        // Fall back to non-empty lines
-        if (count($lines) < 2) {
-            $lines = array_filter(array_map('trim', explode("\n", $text)));
-        }
-
-        $lines = array_values(array_slice($lines, 0, 10)); // max 10 criteria
-
-        if (empty($lines)) {
+        if (empty($rawLines)) {
             return [['text' => 'General competency assessment', 'max_marks' => $totalMarks]];
         }
 
-        // Distribute marks as evenly as possible
-        $n    = count($lines);
+        // -----------------------------------------------------------
+        // Try to extract per-criterion marks from common memo formats:
+        //   "1. Explain X (5)"          trailing bare number
+        //   "1. Explain X (5 marks)"    trailing "(N marks)"
+        //   "1. Explain X [5]"          trailing [N]
+        //   "1. Explain X /5"           trailing /N
+        //   "1. Explain X – 5 marks"    em/en dash
+        //   "[5] 1. Explain X"          leading bracket
+        //   "(5) 1. Explain X"          leading paren
+        // -----------------------------------------------------------
+        $marksPatterns = [
+            '/\(\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*\)\s*$/i',   // trailing (N) or (N marks)
+            '/\[\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*\]\s*$/i',   // trailing [N]
+            '/\/\s*(\d+(?:\.\d+)?)\s*$/i',                       // trailing /N
+            '/[-–—]\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*$/i',      // trailing – N or – N marks
+            '/\b(\d+(?:\.\d+)?)\s*(?:marks?)\s*$/i',             // trailing "N marks"
+            '/^\s*\[\s*(\d+(?:\.\d+)?)\s*\]/i',                  // leading [N]
+            '/^\s*\(\s*(\d+(?:\.\d+)?)\s*\)/i',                  // leading (N)
+        ];
+
+        // Strip common question prefixes ("1.", "1)", "Q1.", "Q1:")
+        $stripPrefix = fn(string $line): string =>
+            preg_replace('/^\s*(?:Q\s*)?\d+\s*[\.\)\:]\s*/i', '', $line);
+
+        $criteria     = [];
+        $parsedMarks  = [];
+        $marksSum     = 0;
+
+        foreach ($rawLines as $line) {
+            $marks    = null;
+            $clean    = $line;
+
+            foreach ($marksPatterns as $pattern) {
+                if (preg_match($pattern, $clean, $m)) {
+                    $marks = (float) $m[1];
+                    // Remove the matched marks token from the display text
+                    $clean = preg_replace($pattern, '', $clean);
+                    break;
+                }
+            }
+
+            // Strip question number prefix from display text
+            $clean = trim($stripPrefix($clean));
+
+            if ($clean === '') continue;
+
+            $criteria[]   = ['text' => $clean, 'raw_marks' => $marks];
+            $parsedMarks[] = $marks;
+            if ($marks !== null) $marksSum += $marks;
+        }
+
+        if (empty($criteria)) {
+            return [['text' => 'General competency assessment', 'max_marks' => $totalMarks]];
+        }
+
+        // -----------------------------------------------------------
+        // Determine whether we successfully parsed individual marks
+        // -----------------------------------------------------------
+        $parsedCount = count(array_filter($parsedMarks, fn($v) => $v !== null));
+        $allParsed   = $parsedCount === count($criteria);
+
+        if ($allParsed && $marksSum > 0) {
+            // Scale parsed marks to match totalMarks if they differ
+            $scale = ($marksSum != $totalMarks) ? ($totalMarks / $marksSum) : 1.0;
+
+            $result   = [];
+            $assigned = 0;
+            $last     = count($criteria) - 1;
+
+            foreach ($criteria as $i => $crit) {
+                if ($i === $last) {
+                    // Give remainder to last criterion to avoid rounding drift
+                    $m = $totalMarks - $assigned;
+                } else {
+                    $m = (int) round($crit['raw_marks'] * $scale);
+                }
+                $assigned += $m;
+                $result[] = ['text' => $crit['text'], 'max_marks' => max(1, $m)];
+            }
+
+            return $result;
+        }
+
+        // -----------------------------------------------------------
+        // Fallback: distribute marks evenly across all criteria
+        // (no cap — show all questions found in the memo)
+        // -----------------------------------------------------------
+        $n    = count($criteria);
         $base = (int) floor($totalMarks / $n);
         $rem  = $totalMarks - ($base * $n);
 
-        $criteria = [];
-        foreach ($lines as $i => $line) {
-            $criteria[] = [
-                'text'      => $line,
+        $result = [];
+        foreach ($criteria as $i => $crit) {
+            $result[] = [
+                'text'      => $crit['text'],
                 'max_marks' => $base + ($i === 0 ? $rem : 0),
             ];
         }
 
-        return $criteria;
+        return $result;
     }
 
     private function mockComment(float $pct, string $moduleContext, bool $lenient): string
