@@ -53,8 +53,11 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
                 @foreach($learners as $learner)
-                <tr class="hover:bg-gray-50 transition-colors">
-                    <td class="px-5 py-3 font-medium text-gray-900">{{ $learner->full_name }}</td>
+                @php $poeUrl = route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]); @endphp
+                <tr class="hover:bg-orange-50 transition-colors cursor-pointer" onclick="window.location='{{ $poeUrl }}'">
+                    <td class="px-5 py-3 font-medium text-orange-700">
+                        <a href="{{ $poeUrl }}" onclick="event.stopPropagation()">{{ $learner->full_name }}</a>
+                    </td>
                     <td class="px-5 py-3 text-gray-500">{{ $learner->email ?? '—' }}</td>
                     <td class="px-5 py-3 text-gray-500 font-mono text-xs">{{ $learner->external_ref ?? '—' }}</td>
                     <td class="px-5 py-3">
@@ -63,11 +66,11 @@
                             {{ ucfirst($learner->status) }}
                         </span>
                     </td>
-                    <td class="px-5 py-3 text-right">
+                    <td class="px-5 py-3 text-right" onclick="event.stopPropagation()">
                         <div class="flex items-center justify-end gap-3">
-                            <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}"
+                            <a href="{{ $poeUrl }}"
                                class="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                                POE Profile
+                                POE →
                             </a>
                             <form method="POST" action="{{ route('qualifications.cohorts.learners.destroy', [$qualification, $cohort, $learner]) }}"
                                 onsubmit="return confirm('Remove {{ addslashes($learner->full_name) }}?')" class="inline">
