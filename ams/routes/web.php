@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActiveContextController;
+use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
@@ -38,6 +39,16 @@ Route::middleware('auth')->group(function () {
             ->name('modules.add');
         Route::delete('modules/{module}', [QualificationModuleController::class, 'destroyModule'])
             ->name('modules.destroy');
+
+        // Assignments
+        Route::get('assignments', [AssignmentController::class, 'index'])->name('assignments.index');
+        Route::get('assignments/create', [AssignmentController::class, 'create'])->name('assignments.create');
+        Route::post('assignments', [AssignmentController::class, 'store'])->name('assignments.store');
+        Route::get('assignments/{assignment}', [AssignmentController::class, 'show'])->name('assignments.show');
+        Route::get('assignments/{assignment}/edit', [AssignmentController::class, 'edit'])->name('assignments.edit');
+        Route::put('assignments/{assignment}', [AssignmentController::class, 'update'])->name('assignments.update');
+        Route::delete('assignments/{assignment}', [AssignmentController::class, 'destroy'])->name('assignments.destroy');
+        Route::get('assignments/{assignment}/memo', [AssignmentController::class, 'downloadMemo'])->name('assignments.memo');
 
         // Cohorts
         Route::resource('cohorts', CohortController::class)

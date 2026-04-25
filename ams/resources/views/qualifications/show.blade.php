@@ -5,12 +5,22 @@
 @section('breadcrumb', 'Qualifications → ' . $qualification->name)
 
 @section('page-actions')
+    <a href="{{ route('qualifications.assignments.index', $qualification) }}"
+        class="inline-flex items-center gap-2 px-4 py-2 border border-orange-300 text-orange-700 bg-orange-50 text-sm font-medium rounded-lg hover:bg-orange-100 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        Assignments
+        @php $aCount = $qualification->assignments()->count(); @endphp
+        @if($aCount > 0)
+            <span class="text-xs bg-orange-200 text-orange-800 rounded-full px-1.5">{{ $aCount }}</span>
+        @endif
+    </a>
     <a href="{{ route('qualifications.modules.index', $qualification) }}"
         class="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 text-blue-700 bg-blue-50 text-sm font-medium rounded-lg hover:bg-blue-100 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         Modules
-        @if($qualification->modules_count ?? $qualification->modules()->count() > 0)
-            <span class="text-xs bg-blue-200 text-blue-800 rounded-full px-1.5">{{ $qualification->modules()->count() }}</span>
+        @php $mCount = $qualification->modules()->count(); @endphp
+        @if($mCount > 0)
+            <span class="text-xs bg-blue-200 text-blue-800 rounded-full px-1.5">{{ $mCount }}</span>
         @endif
     </a>
     <a href="{{ route('qualifications.cohorts.create', $qualification) }}"
