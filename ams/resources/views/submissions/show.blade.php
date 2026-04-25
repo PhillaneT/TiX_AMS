@@ -149,6 +149,35 @@
     {{-- Right: Sign-off panel --}}
     <div class="space-y-4">
 
+        {{-- Grading instructions used --}}
+        @php
+            $effectiveInstructions = trim($submission->assignment->ai_instructions ?? '')
+                ?: 'Use the marking memo as a guiding framework only, not a rigid answer key. Credit any response that demonstrates genuine understanding of the core concept, even if the wording differs. Only assess within the scope of the module — do not penalise for knowledge gaps from other modules. Prioritise practical application over verbatim theory recall.';
+            $mappedModules = $submission->assignment->qualificationModules ?? collect();
+        @endphp
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h3 class="text-xs font-semibold text-blue-800 mb-2 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Grading Rules Applied
+            </h3>
+            @if($mappedModules->isNotEmpty())
+            <div class="mb-2">
+                <span class="text-xs text-blue-600 font-semibold">Module Scope: </span>
+                @foreach($mappedModules as $m)
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold mr-1
+                        {{ ['KM'=>'bg-blue-100 text-blue-800','PM'=>'bg-green-100 text-green-800','WM'=>'bg-orange-100 text-orange-800','US'=>'bg-purple-100 text-purple-800'][strtoupper($m->module_type)] ?? 'bg-gray-100 text-gray-700' }}">
+                        {{ strtoupper($m->module_type) }}
+                    </span>
+                    <span class="text-xs text-blue-700">{{ $m->title }}</span>
+                @endforeach
+            </div>
+            @endif
+            <p class="text-xs text-blue-700 leading-relaxed">{{ $effectiveInstructions }}</p>
+            @if(! trim($submission->assignment->ai_instructions ?? ''))
+                <p class="text-xs text-blue-400 mt-1 italic">System default — set assignment-specific instructions in the assignment edit screen.</p>
+            @endif
+        </div>
+
         {{-- Status card --}}
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
             <h3 class="text-sm font-semibold text-gray-800 mb-3">Submission Status</h3>

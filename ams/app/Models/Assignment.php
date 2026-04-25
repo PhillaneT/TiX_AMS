@@ -19,6 +19,7 @@ class Assignment extends Model
         'memo_type',
         'memo_text',
         'memo_path',
+        'ai_instructions',
     ];
 
     public function qualification()

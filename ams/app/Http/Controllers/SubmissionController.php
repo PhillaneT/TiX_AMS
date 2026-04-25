@@ -136,7 +136,7 @@ class SubmissionController extends Controller
     {
         abort_if($submission->learner_id !== $learner->id, 404);
 
-        $submission->load(['assignment', 'markingResult', 'assessor']);
+        $submission->load(['assignment.qualificationModules', 'markingResult', 'assessor']);
         $result = $submission->markingResult;
 
         return view('submissions.show', compact('qualification', 'cohort', 'learner', 'submission', 'result'));
@@ -223,10 +223,37 @@ class SubmissionController extends Controller
     // -------------------------------------------------------
     // MOCK AI MARKING ENGINE
     // -------------------------------------------------------
+
+    /**
+     * Default system grading philosophy — used when the assessor has not
+     * written assignment-specific AI instructions.
+     */
+    private const DEFAULT_AI_INSTRUCTIONS =
+        'Use the marking memo as a guiding framework only, not a rigid answer key. ' .
+        'Credit any response that demonstrates genuine understanding of the core concept, ' .
+        'even if the wording differs from the memo. ' .
+        'Only assess within the scope of the module being marked — do not penalise the ' .
+        'learner for knowledge gaps that belong to other modules. ' .
+        'Prioritise demonstrated practical application over verbatim theory recall. ' .
+        'Where a learner\'s answer is partially correct, award proportional marks.';
+
     private function runMockMarking(\App\Models\Assignment $assignment): array
     {
         $memoText   = $assignment->memo_text ?? '';
         $totalMarks = max(1, (int) ($assignment->total_marks ?? 100));
+
+        // Resolve effective grading instructions
+        $instructions = trim($assignment->ai_instructions ?? '')
+            ?: self::DEFAULT_AI_INSTRUCTIONS;
+
+        // Determine whether instructions suggest a lenient (guide-only) approach
+        $isLenient = $this->instructionsAreLenient($instructions);
+
+        // Load mapped modules for scope context
+        $modules = $assignment->qualificationModules()->get();
+        $moduleContext = $modules->map(fn($m) =>
+            strtoupper($m->module_type) . ': ' . $m->title
+        )->implode(' | ');
 
         $criteria = $this->parseMemo($memoText, $totalMarks);
 
@@ -234,10 +261,17 @@ class SubmissionController extends Controller
         $totalAwarded = 0;
 
         foreach ($criteria as $crit) {
-            // Bias toward passing (70 % of the time award 60-100 %)
-            $pct     = rand(1, 10) <= 7
-                ? rand(60, 100) / 100
-                : rand(20, 59)  / 100;
+            // Lenient/guide-only mode: skewed more towards higher marks
+            if ($isLenient) {
+                $pct = rand(1, 10) <= 8
+                    ? rand(65, 100) / 100   // 80 % chance of good marks
+                    : rand(35, 64)  / 100;
+            } else {
+                $pct = rand(1, 10) <= 7
+                    ? rand(60, 100) / 100
+                    : rand(20, 59)  / 100;
+            }
+
             $awarded = (int) round($crit['max_marks'] * $pct);
             $totalAwarded += $awarded;
 
@@ -245,7 +279,7 @@ class SubmissionController extends Controller
                 'criterion' => $crit['text'],
                 'max_marks' => $crit['max_marks'],
                 'awarded'   => $awarded,
-                'comment'   => $this->mockComment($pct),
+                'comment'   => $this->mockComment($pct, $moduleContext, $isLenient),
             ];
         }
 
@@ -253,11 +287,30 @@ class SubmissionController extends Controller
         $verdict  = $pctTotal >= 0.5 ? 'COMPETENT' : 'NOT_YET_COMPETENT';
 
         return [
-            'questions'     => $questions,
-            'verdict'       => $verdict,
-            'total_awarded' => $totalAwarded,
-            'total_marks'   => $totalMarks,
+            'questions'      => $questions,
+            'verdict'        => $verdict,
+            'total_awarded'  => $totalAwarded,
+            'total_marks'    => $totalMarks,
+            'instructions'   => $instructions,
+            'module_context' => $moduleContext,
         ];
+    }
+
+    /**
+     * Returns true if the instructions signal a flexible / guide-only grading approach.
+     */
+    private function instructionsAreLenient(string $instructions): bool
+    {
+        $leniencyKeywords = [
+            'guide', 'framework', 'flexible', 'credit', 'alternative',
+            'proportional', 'practical', 'application', 'not a rigid',
+            'not rigid', 'not penalise', 'not penalize', 'scope only',
+        ];
+        $lower = strtolower($instructions);
+        foreach ($leniencyKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
     }
 
     private function parseMemo(string $text, int $totalMarks): array
@@ -297,26 +350,42 @@ class SubmissionController extends Controller
         return $criteria;
     }
 
-    private function mockComment(float $pct): string
+    private function mockComment(float $pct, string $moduleContext, bool $lenient): string
     {
+        $scopeNote = $moduleContext
+            ? ' (assessed within module scope: ' . $moduleContext . ')'
+            : '';
+
         if ($pct >= 0.85) {
             $pool = [
-                'Excellent response — demonstrates thorough understanding.',
-                'Comprehensive answer with accurate application of concepts.',
-                'Strong evidence of competency; all key points addressed.',
+                'Excellent response — demonstrates thorough understanding of the concept' . ($moduleContext ? ' as required by this module' : '') . '.',
+                'Comprehensive answer with accurate application; all key points addressed.',
+                'Strong evidence of competency within the assessed scope.',
             ];
         } elseif ($pct >= 0.60) {
-            $pool = [
-                'Satisfactory — key criteria met with minor gaps.',
-                'Adequate response; core concepts demonstrated.',
-                'Meets the minimum standard; some detail could be expanded.',
-            ];
+            $pool = $lenient
+                ? [
+                    'Adequate response — core concept demonstrated; wording differs from memo but understanding is evident.',
+                    'Satisfactory practical application; minor gaps do not affect overall competency for this criterion.',
+                    'Key idea present; alternative framing accepted as per grading instructions.',
+                ]
+                : [
+                    'Satisfactory — key criteria met with minor gaps.',
+                    'Adequate response; core concepts demonstrated.',
+                    'Meets the minimum standard; some detail could be expanded.',
+                ];
         } else {
-            $pool = [
-                'Insufficient evidence of competency for this criterion.',
-                'Key criteria not adequately addressed.',
-                'Response does not demonstrate the required standard.',
-            ];
+            $pool = $lenient
+                ? [
+                    'Insufficient evidence of understanding within the module scope' . ($moduleContext ? ' (' . $moduleContext . ')' : '') . '.',
+                    'Response does not adequately address the criterion, even allowing for alternative phrasing.',
+                    'Core concept not demonstrated; marks withheld within assessed scope only.',
+                ]
+                : [
+                    'Insufficient evidence of competency for this criterion.',
+                    'Key criteria not adequately addressed.',
+                    'Response does not demonstrate the required standard.',
+                ];
         }
 
         return $pool[array_rand($pool)];

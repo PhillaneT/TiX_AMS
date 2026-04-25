@@ -59,6 +59,21 @@
                         placeholder="e.g. 100">
                 </div>
 
+                {{-- AI Grading Instructions --}}
+                <div class="col-span-2 pt-2 border-t border-gray-100">
+                    <label for="ai_instructions" class="block text-sm font-semibold text-gray-700 mb-1">
+                        AI Grading Instructions
+                        <span class="ml-1 text-xs font-normal text-gray-400">(optional)</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mb-2">
+                        Tell the AI <em>how</em> to grade — scope, flexibility, what to credit or ignore. Leave blank to use the system default.
+                    </p>
+                    <textarea id="ai_instructions" name="ai_instructions" rows="4"
+                        class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g. Use the memo as a guiding framework only, not a rigid answer key. Credit any answer that demonstrates understanding of the core concept, even if worded differently. Only assess within the scope of this module — do not penalise for knowledge from other modules. Prioritise practical application over theory recall.">{{ old('ai_instructions') }}</textarea>
+                    <p class="text-xs text-gray-400 mt-1">These instructions override the system default for this assignment only. Max 3 000 characters.</p>
+                </div>
+
                 {{-- Memo section --}}
                 <div class="col-span-2 pt-2 border-t border-gray-100">
                     <label class="block text-sm font-semibold text-gray-700 mb-3">Marking Memo</label>
