@@ -167,8 +167,8 @@
                                     <div class="text-sm font-medium text-gray-800 leading-tight">{{ $mod->title }}</div>
                                     <div class="text-xs text-gray-400 mt-0.5">
                                         <code>{{ $mod->module_code }}</code>
-                                        @if($mod->nqf_level) &bull; NQF {{ $mod->nqf_level }}@endif
-                                        @if($mod->credits) &bull; {{ $mod->credits }} credits@endif
+                                        @if($mod->nqf_level) &bull; NQF {{ $mod->nqf_level }} @endif
+                                        @if($mod->credits) &bull; {{ $mod->credits }} credits @endif
                                     </div>
                                 </div>
                                 <form method="POST"
