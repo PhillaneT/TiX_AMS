@@ -330,7 +330,7 @@ class SubmissionController extends Controller
         //   <marker answer text>            ← ignored by parser
         //   Maximum score: N                ← marks for this criterion
         // ------------------------------------------------------------------
-        if (preg_match('/^\s*maximum score\s*:/im', $text)) {
+        if (preg_match('/^\s*maximum score\s*:?\s*\d/im', $text)) {
             $parsed = $this->parseMoodleMarkingGuide($text, $totalMarks);
             if (! empty($parsed)) return $parsed;
         }
@@ -454,7 +454,7 @@ class SubmissionController extends Controller
             if ($line === '') continue;
 
             // ---- "Maximum score: N" → end of current criterion block ----
-            if (preg_match('/^maximum score\s*:\s*(\d+(?:\.\d+)?)/i', $line, $m)) {
+            if (preg_match('/^maximum score\s*:?\s*(\d+(?:\.\d+)?)/i', $line, $m)) {
                 if ($currentName !== null) {
                     $criteria[] = [
                         'text'      => $currentName,
