@@ -59,39 +59,87 @@
 </div>
 
 @if($context?->cohort_id)
+@php
+    $qual  = $context->qualification;
+    $cohrt = $context->cohort;
+@endphp
+
 {{-- Stats row --}}
 <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-    @foreach([
-        ['label' => 'Learners',        'value' => $stats['learners'] ?? 0,        'color' => 'text-gray-900'],
-        ['label' => 'Submissions',     'value' => $stats['submissions'] ?? 0,     'color' => 'text-gray-900'],
-        ['label' => 'Pending Review',  'value' => $stats['pending_review'] ?? 0,  'color' => 'text-orange-600'],
-        ['label' => 'Signed Off',      'value' => $stats['signed_off'] ?? 0,      'color' => 'text-green-600'],
-        ['label' => 'Emailed',         'value' => $stats['emailed'] ?? 0,         'color' => 'text-purple-600'],
-    ] as $stat)
-    <div class="bg-white rounded-xl border border-gray-200 p-4">
-        <p class="text-xs text-gray-500 font-medium">{{ $stat['label'] }}</p>
-        <p class="text-2xl font-bold {{ $stat['color'] }} mt-1">{{ $stat['value'] }}</p>
-    </div>
-    @endforeach
+
+    {{-- Learners → learners index --}}
+    <a href="{{ route('qualifications.cohorts.learners.index', [$qual, $cohrt]) }}"
+       class="bg-white rounded-xl border border-gray-200 p-4 hover:border-orange-300 hover:shadow-sm transition group block">
+        <p class="text-xs text-gray-500 font-medium group-hover:text-orange-600 transition">Learners</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{{ $stats['learners'] ?? 0 }}</p>
+        <p class="text-xs text-gray-400 mt-0.5 group-hover:text-orange-500 transition">View all →</p>
+    </a>
+
+    {{-- Submissions → cohort overview --}}
+    <a href="{{ route('qualifications.cohorts.show', [$qual, $cohrt]) }}"
+       class="bg-white rounded-xl border border-gray-200 p-4 hover:border-orange-300 hover:shadow-sm transition group block">
+        <p class="text-xs text-gray-500 font-medium group-hover:text-orange-600 transition">Submissions</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{{ $stats['submissions'] ?? 0 }}</p>
+        <p class="text-xs text-gray-400 mt-0.5 group-hover:text-orange-500 transition">View cohort →</p>
+    </a>
+
+    {{-- Pending Review → learners index (action needed) --}}
+    <a href="{{ route('qualifications.cohorts.learners.index', [$qual, $cohrt]) }}"
+       class="bg-white rounded-xl border border-gray-200 p-4 hover:border-orange-300 hover:shadow-sm transition group block">
+        <p class="text-xs text-gray-500 font-medium group-hover:text-orange-600 transition">Pending Review</p>
+        <p class="text-2xl font-bold text-orange-600 mt-1">{{ $stats['pending_review'] ?? 0 }}</p>
+        <p class="text-xs text-gray-400 mt-0.5 group-hover:text-orange-500 transition">Needs action →</p>
+    </a>
+
+    {{-- Signed Off → learners index --}}
+    <a href="{{ route('qualifications.cohorts.learners.index', [$qual, $cohrt]) }}"
+       class="bg-white rounded-xl border border-gray-200 p-4 hover:border-green-300 hover:shadow-sm transition group block">
+        <p class="text-xs text-gray-500 font-medium group-hover:text-green-700 transition">Signed Off</p>
+        <p class="text-2xl font-bold text-green-600 mt-1">{{ $stats['signed_off'] ?? 0 }}</p>
+        <p class="text-xs text-gray-400 mt-0.5 group-hover:text-green-600 transition">View learners →</p>
+    </a>
+
+    {{-- Emailed → learners index --}}
+    <a href="{{ route('qualifications.cohorts.learners.index', [$qual, $cohrt]) }}"
+       class="bg-white rounded-xl border border-gray-200 p-4 hover:border-purple-300 hover:shadow-sm transition group block">
+        <p class="text-xs text-gray-500 font-medium group-hover:text-purple-700 transition">Emailed</p>
+        <p class="text-2xl font-bold text-purple-600 mt-1">{{ $stats['emailed'] ?? 0 }}</p>
+        <p class="text-xs text-gray-400 mt-0.5 group-hover:text-purple-600 transition">View learners →</p>
+    </a>
+
 </div>
 
 {{-- Recent activity --}}
 @if($recent->count())
 <div class="bg-white rounded-xl border border-gray-200">
-    <div class="px-5 py-4 border-b border-gray-100">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-gray-900">Recent Submissions</h3>
+        <a href="{{ route('qualifications.cohorts.learners.index', [$qual, $cohrt]) }}"
+           class="text-xs text-orange-600 hover:underline font-medium">View all learners →</a>
     </div>
     <div class="divide-y divide-gray-100">
         @foreach($recent as $sub)
-        <div class="px-5 py-3 flex items-center justify-between">
-            <div>
-                <p class="text-sm font-medium text-gray-900">{{ $sub->learner->full_name }}</p>
-                <p class="text-xs text-gray-500">{{ $sub->assignment->name }}</p>
+        @php
+            $badge  = $sub->statusBadge();
+            $learner = $sub->learner;
+            // Link directly to the submission review if marked, otherwise to POE
+            $subLink = in_array($sub->status, ['review_required','signed_off','emailed','marking','queued'])
+                ? route('qualifications.cohorts.learners.submissions.show', [$qual, $cohrt, $learner, $sub])
+                : route('qualifications.cohorts.learners.poe', [$qual, $cohrt, $learner]);
+            $poeLink = route('qualifications.cohorts.learners.poe', [$qual, $cohrt, $learner]);
+        @endphp
+        <div class="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+            <div class="flex-1 min-w-0">
+                <a href="{{ $poeLink }}"
+                   class="text-sm font-medium text-gray-900 hover:text-orange-600 transition">
+                    {{ $learner->full_name }}
+                </a>
+                <p class="text-xs text-gray-500 truncate">{{ $sub->assignment->name }}</p>
             </div>
-            @php $badge = $sub->statusBadge(); @endphp
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $badge['class'] }}">
+            <a href="{{ $subLink }}"
+               class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $badge['class'] }} hover:opacity-80 transition shrink-0">
                 {{ $badge['label'] }}
-            </span>
+            </a>
         </div>
         @endforeach
     </div>
@@ -99,6 +147,8 @@
 @else
 <div class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
     <p class="text-sm">No submissions yet in this cohort.</p>
+    <a href="{{ route('qualifications.cohorts.learners.index', [$qual, $cohrt]) }}"
+       class="mt-2 inline-block text-xs text-orange-600 hover:underline">Go to learners →</a>
 </div>
 @endif
 
