@@ -319,6 +319,26 @@ class SubmissionController extends Controller
             return [['text' => 'General competency assessment', 'max_marks' => $totalMarks]];
         }
 
+        // ------------------------------------------------------------------
+        // FORMAT 1 — Moodle Marking Guide
+        // Detected by the presence of "Maximum score:" lines.
+        // Block structure (repeats per criterion):
+        //   <Criterion name>
+        //   Description for students        ← optional structural header
+        //   <student-facing text>           ← ignored by parser
+        //   Description for Markers         ← optional structural header
+        //   <marker answer text>            ← ignored by parser
+        //   Maximum score: N                ← marks for this criterion
+        // ------------------------------------------------------------------
+        if (preg_match('/^\s*maximum score\s*:/im', $text)) {
+            $parsed = $this->parseMoodleMarkingGuide($text, $totalMarks);
+            if (! empty($parsed)) return $parsed;
+        }
+
+        // ------------------------------------------------------------------
+        // FORMAT 2 — Inline marks on the same line as the question
+        // Supports: trailing (N), [N], /N, – N marks, "N marks", leading [N], (N)
+        // ------------------------------------------------------------------
         $rawLines = array_values(array_filter(
             array_map('trim', explode("\n", $text)),
             fn($l) => $l !== ''
@@ -328,53 +348,39 @@ class SubmissionController extends Controller
             return [['text' => 'General competency assessment', 'max_marks' => $totalMarks]];
         }
 
-        // -----------------------------------------------------------
-        // Try to extract per-criterion marks from common memo formats:
-        //   "1. Explain X (5)"          trailing bare number
-        //   "1. Explain X (5 marks)"    trailing "(N marks)"
-        //   "1. Explain X [5]"          trailing [N]
-        //   "1. Explain X /5"           trailing /N
-        //   "1. Explain X – 5 marks"    em/en dash
-        //   "[5] 1. Explain X"          leading bracket
-        //   "(5) 1. Explain X"          leading paren
-        // -----------------------------------------------------------
         $marksPatterns = [
-            '/\(\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*\)\s*$/i',   // trailing (N) or (N marks)
-            '/\[\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*\]\s*$/i',   // trailing [N]
-            '/\/\s*(\d+(?:\.\d+)?)\s*$/i',                       // trailing /N
-            '/[-–—]\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*$/i',      // trailing – N or – N marks
-            '/\b(\d+(?:\.\d+)?)\s*(?:marks?)\s*$/i',             // trailing "N marks"
-            '/^\s*\[\s*(\d+(?:\.\d+)?)\s*\]/i',                  // leading [N]
-            '/^\s*\(\s*(\d+(?:\.\d+)?)\s*\)/i',                  // leading (N)
+            '/\(\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*\)\s*$/i',
+            '/\[\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*\]\s*$/i',
+            '/\/\s*(\d+(?:\.\d+)?)\s*$/i',
+            '/[-–—]\s*(\d+(?:\.\d+)?)\s*(?:marks?)?\s*$/i',
+            '/\b(\d+(?:\.\d+)?)\s*(?:marks?)\s*$/i',
+            '/^\s*\[\s*(\d+(?:\.\d+)?)\s*\]/i',
+            '/^\s*\(\s*(\d+(?:\.\d+)?)\s*\)/i',
         ];
 
-        // Strip common question prefixes ("1.", "1)", "Q1.", "Q1:")
         $stripPrefix = fn(string $line): string =>
             preg_replace('/^\s*(?:Q\s*)?\d+\s*[\.\)\:]\s*/i', '', $line);
 
-        $criteria     = [];
-        $parsedMarks  = [];
-        $marksSum     = 0;
+        $criteria    = [];
+        $parsedMarks = [];
+        $marksSum    = 0;
 
         foreach ($rawLines as $line) {
-            $marks    = null;
-            $clean    = $line;
+            $marks = null;
+            $clean = $line;
 
             foreach ($marksPatterns as $pattern) {
                 if (preg_match($pattern, $clean, $m)) {
                     $marks = (float) $m[1];
-                    // Remove the matched marks token from the display text
                     $clean = preg_replace($pattern, '', $clean);
                     break;
                 }
             }
 
-            // Strip question number prefix from display text
             $clean = trim($stripPrefix($clean));
-
             if ($clean === '') continue;
 
-            $criteria[]   = ['text' => $clean, 'raw_marks' => $marks];
+            $criteria[]    = ['text' => $clean, 'raw_marks' => $marks];
             $parsedMarks[] = $marks;
             if ($marks !== null) $marksSum += $marks;
         }
@@ -383,27 +389,19 @@ class SubmissionController extends Controller
             return [['text' => 'General competency assessment', 'max_marks' => $totalMarks]];
         }
 
-        // -----------------------------------------------------------
-        // Determine whether we successfully parsed individual marks
-        // -----------------------------------------------------------
         $parsedCount = count(array_filter($parsedMarks, fn($v) => $v !== null));
         $allParsed   = $parsedCount === count($criteria);
 
         if ($allParsed && $marksSum > 0) {
-            // Scale parsed marks to match totalMarks if they differ
-            $scale = ($marksSum != $totalMarks) ? ($totalMarks / $marksSum) : 1.0;
-
+            $scale    = ($marksSum != $totalMarks) ? ($totalMarks / $marksSum) : 1.0;
             $result   = [];
             $assigned = 0;
             $last     = count($criteria) - 1;
 
             foreach ($criteria as $i => $crit) {
-                if ($i === $last) {
-                    // Give remainder to last criterion to avoid rounding drift
-                    $m = $totalMarks - $assigned;
-                } else {
-                    $m = (int) round($crit['raw_marks'] * $scale);
-                }
+                $m = ($i === $last)
+                    ? $totalMarks - $assigned
+                    : (int) round($crit['raw_marks'] * $scale);
                 $assigned += $m;
                 $result[] = ['text' => $crit['text'], 'max_marks' => max(1, $m)];
             }
@@ -411,20 +409,117 @@ class SubmissionController extends Controller
             return $result;
         }
 
-        // -----------------------------------------------------------
-        // Fallback: distribute marks evenly across all criteria
-        // (no cap — show all questions found in the memo)
-        // -----------------------------------------------------------
+        // ------------------------------------------------------------------
+        // FORMAT 3 — Plain list, no mark annotations: distribute evenly
+        // ------------------------------------------------------------------
         $n    = count($criteria);
         $base = (int) floor($totalMarks / $n);
         $rem  = $totalMarks - ($base * $n);
 
-        $result = [];
-        foreach ($criteria as $i => $crit) {
-            $result[] = [
+        return array_map(fn($crit, $i) => [
+            'text'      => $crit['text'],
+            'max_marks' => $base + ($i === 0 ? $rem : 0),
+        ], $criteria, array_keys($criteria));
+    }
+
+    /**
+     * Parse a Moodle Marking Guide memo into criterion blocks.
+     *
+     * Each block looks like:
+     *   <Criterion name line>
+     *   Description for students          <- structural header, skip
+     *   <student description text>        <- skip
+     *   Description for Markers           <- structural header, skip
+     *   <marker description text>         <- skip
+     *   Maximum score: N                  <- end of block, extract N
+     *
+     * "Maximum score: N" values are used as relative weights and scaled
+     * to the assignment's totalMarks.
+     */
+    private function parseMoodleMarkingGuide(string $text, int $totalMarks): array
+    {
+        $lines = array_map('trim', explode("\n", $text));
+
+        // Lines to skip entirely (Moodle structural headers and noise)
+        $skipPatterns = [
+            '/^description for students/i',
+            '/^description for markers?/i',
+        ];
+
+        $criteria     = [];
+        $currentName  = null;
+        $inDescBlock  = false;   // true while inside a student/marker description
+
+        foreach ($lines as $line) {
+            if ($line === '') continue;
+
+            // ---- "Maximum score: N" → end of current criterion block ----
+            if (preg_match('/^maximum score\s*:\s*(\d+(?:\.\d+)?)/i', $line, $m)) {
+                if ($currentName !== null) {
+                    $criteria[] = [
+                        'text'      => $currentName,
+                        'raw_marks' => (float) $m[1],
+                    ];
+                }
+                $currentName = null;
+                $inDescBlock = false;
+                continue;
+            }
+
+            // ---- Structural headers ("Description for …") ----
+            $isHeader = false;
+            foreach ($skipPatterns as $pat) {
+                if (preg_match($pat, $line)) {
+                    $isHeader    = true;
+                    $inDescBlock = true;   // everything until "Maximum score:" is descriptive
+                    break;
+                }
+            }
+            if ($isHeader) continue;
+
+            // ---- Inside a description block → skip content lines ----
+            if ($inDescBlock) continue;
+
+            // ---- Otherwise: first non-empty, non-header line is the criterion name ----
+            if ($currentName === null) {
+                // Strip leading question numbers ("1.", "Q1.", "1)", "Q1:")
+                $currentName = trim(preg_replace('/^\s*(?:Q\s*)?\d+\s*[\.\)\:]\s*/i', '', $line));
+            }
+            // Additional lines before any header appear → keep only the first (the name)
+        }
+
+        // Handle a trailing block with no final "Maximum score:" line
+        // (edge case: last criterion might be incomplete — ignore it)
+
+        if (empty($criteria)) return [];
+
+        // Scale Moodle's internal scores (often 0-N per criterion) to the
+        // assignment's totalMarks, preserving relative weight.
+        $moodleTotal = array_sum(array_column($criteria, 'raw_marks'));
+
+        if ($moodleTotal <= 0) {
+            // All scores are zero — distribute evenly
+            $n    = count($criteria);
+            $base = (int) floor($totalMarks / $n);
+            $rem  = $totalMarks - ($base * $n);
+
+            return array_map(fn($crit, $i) => [
                 'text'      => $crit['text'],
                 'max_marks' => $base + ($i === 0 ? $rem : 0),
-            ];
+            ], $criteria, array_keys($criteria));
+        }
+
+        $scale    = $totalMarks / $moodleTotal;
+        $result   = [];
+        $assigned = 0;
+        $last     = count($criteria) - 1;
+
+        foreach ($criteria as $i => $crit) {
+            $m = ($i === $last)
+                ? $totalMarks - $assigned
+                : (int) round($crit['raw_marks'] * $scale);
+            $assigned += $m;
+            $result[] = ['text' => $crit['text'], 'max_marks' => max(1, $m)];
         }
 
         return $result;
