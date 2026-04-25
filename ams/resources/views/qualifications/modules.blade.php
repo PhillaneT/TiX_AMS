@@ -236,111 +236,111 @@ const AMS_MAPPING = @json($mapping);
 <script>
 (function () {
     // -------------------------------------------------------
-    // State: for each module, track which assignment IDs are
-    // currently selected (across all its dropdown rows).
+    // GLOBAL state: assignmentId (string) → owning modId (int)
+    // An assignment can only be owned by ONE module at a time.
     // -------------------------------------------------------
-    const state = {};   // { modId: Set of selected assignment IDs (as strings) }
+    const globalUsed = new Map(); // string assignmentId → int modId
 
-    function getSelected(modId) {
-        if (!state[modId]) state[modId] = new Set();
-        return state[modId];
+    // Collect all current selections across every module and rebuild globalUsed
+    function syncGlobal() {
+        globalUsed.clear();
+        document.querySelectorAll('[data-mod-id]').forEach(function (modEl) {
+            const modId = parseInt(modEl.dataset.modId);
+            modEl.querySelectorAll('.map-row select').forEach(function (sel) {
+                if (sel.value) globalUsed.set(String(sel.value), modId);
+            });
+        });
     }
 
     // -------------------------------------------------------
-    // Build a <select> element for a given module.
-    // currentVal: the currently chosen value for THIS row (so
-    //             it still appears in its own dropdown).
+    // Build a <select> for (modId, currentVal).
+    // Only shows assignments that are:
+    //   • not globally used at all, OR
+    //   • currently selected by THIS exact row (currentVal owned by this modId)
     // -------------------------------------------------------
     function buildSelect(modId, currentVal) {
         const sel = document.createElement('select');
         sel.className = 'flex-1 rounded border border-gray-300 text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white min-w-0';
         sel.name = 'mapping[' + modId + '][]';
 
-        // Blank placeholder
         const blank = document.createElement('option');
         blank.value = '';
         blank.textContent = '— select assignment —';
         if (!currentVal) blank.selected = true;
         sel.appendChild(blank);
 
-        const selected = getSelected(modId);
-
         AMS_ASSIGNMENTS.forEach(function (a) {
+            const id   = String(a.id);
+            const owner = globalUsed.get(id);  // modId that owns this assignment, or undefined
+
+            // Show this option only if it is free, OR it is this row's current value
+            const isMine = (id === String(currentVal));
+            const isFree = (owner === undefined);
+
+            if (!isFree && !isMine) return; // hide completely from this dropdown
+
             const opt = document.createElement('option');
-            opt.value = a.id;
+            opt.value = id;
             opt.textContent = a.label;
-            // Disable if already used by ANOTHER row in this module
-            if (selected.has(String(a.id)) && String(a.id) !== String(currentVal)) {
-                opt.disabled = true;
-            }
-            if (String(a.id) === String(currentVal)) {
-                opt.selected = true;
-            }
+            if (isMine) opt.selected = true;
             sel.appendChild(opt);
         });
 
-        // When selection changes, update state and rebuild all rows in this module
         sel.addEventListener('change', function () {
-            rebuildRows(modId);
+            syncGlobal();
+            rebuildAll();
         });
 
         return sel;
     }
 
     // -------------------------------------------------------
-    // Read current selections from all rows in a module and
-    // rebuild each row's dropdown to reflect available options.
+    // Rebuild all dropdowns in a single module to reflect
+    // the current global state.
     // -------------------------------------------------------
-    function rebuildRows(modId) {
+    function rebuildModule(modId) {
         const container = document.getElementById('rows-' + modId);
         if (!container) return;
 
-        // Collect current values from all selects in this module
-        const rows = container.querySelectorAll('.map-row');
-        const vals = [];
-        rows.forEach(function (row) {
-            const sel = row.querySelector('select');
-            if (sel) vals.push(sel.value);
-        });
-
-        // Update state
-        state[modId] = new Set(vals.filter(function (v) { return v !== ''; }));
-
-        // Rebuild each select in place
-        rows.forEach(function (row, i) {
+        container.querySelectorAll('.map-row').forEach(function (row) {
             const oldSel = row.querySelector('select');
-            const currentVal = oldSel ? oldSel.value : '';
+            if (!oldSel) return;
+            const currentVal = oldSel.value;
             const newSel = buildSelect(modId, currentVal);
-            if (oldSel) {
-                row.replaceChild(newSel, oldSel);
-            }
+            row.replaceChild(newSel, oldSel);
         });
 
         updateAddButton(modId);
     }
 
+    // Rebuild ALL modules — called after any selection changes
+    function rebuildAll() {
+        document.querySelectorAll('[data-mod-id]').forEach(function (modEl) {
+            rebuildModule(parseInt(modEl.dataset.modId));
+        });
+    }
+
     // -------------------------------------------------------
-    // Hide "+ Add activity" if all assignments are already used.
+    // Hide "+ Add activity" when no free assignments remain globally.
     // -------------------------------------------------------
     function updateAddButton(modId) {
         const btn = document.getElementById('add-' + modId);
         if (!btn) return;
-        const selected = getSelected(modId);
-        const allUsed = AMS_ASSIGNMENTS.length > 0 && selected.size >= AMS_ASSIGNMENTS.length;
-        btn.style.display = allUsed ? 'none' : '';
+        const freeCount = AMS_ASSIGNMENTS.filter(function (a) {
+            const owner = globalUsed.get(String(a.id));
+            return owner === undefined; // only truly free ones count
+        }).length;
+        btn.style.display = (AMS_ASSIGNMENTS.length === 0 || freeCount === 0) ? 'none' : '';
     }
 
     // -------------------------------------------------------
-    // Add a new blank row to a module.
+    // Create a row element (select + × button) and append it.
     // -------------------------------------------------------
-    window.addRow = function (modId) {
-        const container = document.getElementById('rows-' + modId);
-        if (!container) return;
-
+    function makeRow(modId, assignmentId) {
         const row = document.createElement('div');
         row.className = 'map-row flex items-center gap-1.5';
 
-        const sel = buildSelect(modId, '');
+        const sel = buildSelect(modId, assignmentId ? String(assignmentId) : '');
         row.appendChild(sel);
 
         const removeBtn = document.createElement('button');
@@ -350,57 +350,53 @@ const AMS_MAPPING = @json($mapping);
         removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>';
         removeBtn.addEventListener('click', function () {
             row.remove();
-            rebuildRows(modId);
+            syncGlobal();
+            rebuildAll();
         });
         row.appendChild(removeBtn);
+        return row;
+    }
 
-        container.appendChild(row);
+    // -------------------------------------------------------
+    // Public: called by the "+ Add activity" button.
+    // -------------------------------------------------------
+    window.addRow = function (modId) {
+        const container = document.getElementById('rows-' + modId);
+        if (!container) return;
+        container.appendChild(makeRow(modId, ''));
         updateAddButton(modId);
     };
 
     // -------------------------------------------------------
-    // Initialise all module rows from server-side mapping data.
+    // Initialise on DOMContentLoaded.
     // -------------------------------------------------------
     function init() {
+        // First pass: seed globalUsed from server-side mapping data
         document.querySelectorAll('[data-mod-id]').forEach(function (modEl) {
-            const modId = parseInt(modEl.dataset.modId);
+            const modId  = parseInt(modEl.dataset.modId);
             const mapped = JSON.parse(modEl.dataset.mapped || '[]');
+            mapped.forEach(function (id) {
+                globalUsed.set(String(id), modId);
+            });
+        });
 
-            // Seed state with already-mapped IDs
-            state[modId] = new Set(mapped.map(String));
-
+        // Second pass: render rows (globalUsed is now fully seeded)
+        document.querySelectorAll('[data-mod-id]').forEach(function (modEl) {
+            const modId  = parseInt(modEl.dataset.modId);
+            const mapped = JSON.parse(modEl.dataset.mapped || '[]');
             const container = document.getElementById('rows-' + modId);
             if (!container) return;
 
             if (mapped.length === 0) {
-                // No existing mappings — start with one blank row if assignments exist
                 if (AMS_ASSIGNMENTS.length > 0) {
-                    addRow(modId);
+                    container.appendChild(makeRow(modId, ''));
                 }
             } else {
-                // Render one row per existing mapping
-                mapped.forEach(function (assignmentId) {
-                    const row = document.createElement('div');
-                    row.className = 'map-row flex items-center gap-1.5';
-
-                    const sel = buildSelect(modId, String(assignmentId));
-                    row.appendChild(sel);
-
-                    const removeBtn = document.createElement('button');
-                    removeBtn.type = 'button';
-                    removeBtn.className = 'text-gray-400 hover:text-red-500 shrink-0 flex items-center justify-center w-5 h-5 rounded transition-colors';
-                    removeBtn.title = 'Remove';
-                    removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>';
-                    removeBtn.addEventListener('click', function () {
-                        row.remove();
-                        rebuildRows(modId);
-                    });
-                    row.appendChild(removeBtn);
-
-                    container.appendChild(row);
+                mapped.forEach(function (id) {
+                    container.appendChild(makeRow(modId, id));
                 });
-                updateAddButton(modId);
             }
+            updateAddButton(modId);
         });
     }
 
