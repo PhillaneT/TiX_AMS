@@ -6,7 +6,7 @@
 
 @section('page-actions')
     <a href="{{ route('qualifications.cohorts.learners.import', [$qualification, $cohort]) }}"
-        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-medium rounded-lg transition-colors">
+        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
         Import Learners
     </a>
     <a href="{{ route('qualifications.cohorts.edit', [$qualification, $cohort]) }}"

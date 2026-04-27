@@ -70,7 +70,7 @@
             </div>
 
             <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
-                <button type="submit" class="px-5 py-2.5 hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-medium rounded-lg transition-colors">
+                <button type="submit" class="px-5 py-2.5 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
                     Save Changes
                 </button>
                 <a href="{{ route('qualifications.show', $qualification) }}" class="px-5 py-2.5 text-sm text-gray-600 hover:text-gray-900">Cancel</a>
