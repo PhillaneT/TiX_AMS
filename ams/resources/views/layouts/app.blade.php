@@ -40,7 +40,7 @@
 <aside class="w-64 bg-navy-900 flex flex-col fixed inset-y-0 left-0 z-40">
     {{-- Logo --}}
     <div class="flex items-center gap-2 px-4 py-5 border-b border-navy-700">
-        <div class="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-[#e3b64d]">
             <span class="text-white font-bold text-sm">AJ</span>
         </div>
         <div>
