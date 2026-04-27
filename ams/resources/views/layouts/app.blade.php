@@ -51,7 +51,7 @@
 
     {{-- Active Context Badge --}}
     @php $ctx = auth()->check() ? \App\Models\ActiveContext::with(['qualification','cohort'])->where('user_id', auth()->id())->first() : null; @endphp
-    <div class="mx-3 mt-4 mb-2 p-3 rounded-lg {{ $ctx?->cohort_id ? 'bg-brand-700' : 'bg-navy-700 border border-dashed border-navy-500' }}">
+    <div class="mx-3 mt-4 mb-2 p-3 rounded-lg {{ $ctx?->cohort_id ? 'bg-[#e3b64d]' : 'bg-navy-700 border border-dashed border-navy-500' }}">
         @if($ctx?->qualification_id)
             <p class="text-xs text-slate-300 font-medium uppercase tracking-wide">Currently Assessing</p>
             <p class="text-white text-sm font-semibold mt-0.5 leading-tight">{{ Str::limit($ctx->qualification->name ?? '—', 28) }}</p>
