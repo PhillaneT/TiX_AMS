@@ -112,7 +112,7 @@
     {{-- User footer --}}
     <div class="border-t border-navy-700 p-4">
         <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e3b64d]">
                 <span class="text-white text-xs font-bold">{{ strtoupper(substr(auth()->user()->name ?? 'A', 0, 1)) }}</span>
             </div>
             <div class="flex-1 min-w-0">
