@@ -55,6 +55,39 @@ The AMS reuses the plugin's PHP AI/PDF code (prompt builder, Anthropic client, P
 - POPIA Operator Agreement workflow + Information Officer registration.
 - Assessor/moderator registration certificate storage + expiry alerts.
 
+### Session 5 additions (2026-04-27) — Moodle LMS Integration & Sync
+
+**New migrations:**
+- `2026_04_27_100001_create_lms_connections_table` — stores Moodle (and future LMS) connections per user: provider, label, base_url, api_token (encrypted with Laravel's `Crypt`), course_ids (JSON), last_synced_at, last_error.
+- `2026_04_27_100002_add_lms_fields_to_assignments_table` — adds `lms_connection_id` + `lms_assignment_id` (Moodle cmid) to assignments.
+- `2026_04_27_100003_add_lms_fields_to_submissions_table` — adds `lms_connection_id`, `lms_submission_id`, and `lms_pushed_at` to submissions.
+
+**New model:** `app/Models/LmsConnection.php` — `provider`, `label`, `base_url`, `api_token_encrypted` (with `setApiToken`/`getApiToken` helpers using `Crypt`), `course_ids` (array cast), `last_synced_at`, `last_error`.
+
+**New service:** `app/Services/MoodleService.php` — wraps Moodle Web Services REST API. Methods: `testConnection`, `getCourses`, `getAssignments`, `getSubmissions`, `downloadFile`, `pushGrade` (with optional PDF attachment via draft file area upload).
+
+**New controllers:**
+- `LmsConnectionController` — CRUD for LMS connections + test-connectivity action.
+- `LmsSyncController` — pull sync (import assignments + submissions from Moodle into AMS) and push action (send grade, feedback text, and graded PDF back to Moodle via `mod_assign_save_grade`).
+
+**New routes (under `/integrations`):**
+- `GET /integrations` — list connections
+- `GET/POST /integrations/create` — add connection
+- `PUT/DELETE /integrations/{integration}` — edit/remove
+- `POST /integrations/{integration}/test` — connectivity test
+- `POST /integrations/{integration}/sync` — pull assignments from Moodle into a selected qualification
+- `POST /integrations/{integration}/sync-submissions` — pull submissions for a Moodle assignment into a cohort
+- `POST /integrations/{integration}/push/{submission}` — push grade + feedback + PDF back to Moodle
+
+**New views:** `resources/views/integrations/` — index (with modal sync UI), create, edit.
+
+**Updated views:**
+- `layouts/app.blade.php` — "LMS Integrations" sidebar link under Settings.
+- `submissions/show.blade.php` — "Push to Moodle" card (with last-pushed timestamp) for Moodle-sourced submissions.
+- `learners/poe.blade.php` — "Moodle" badge on Moodle-sourced assignments and submissions.
+
+**Audit log events added:** `lms.connection.created`, `lms.connection.updated`, `lms.connection.deleted`, `lms.assignment.imported`, `lms.submission.imported`, `lms.submissions.synced`, `lms.sync.pull`, `lms.submission.pushed`.
+
 ### Session 4 additions (2026-04-25) — SAQA Module Mapping + Learner POE Profile
 
 **New tables:**

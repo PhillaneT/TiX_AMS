@@ -176,13 +176,19 @@
                             @endphp
                             <div class="border border-gray-200 rounded-lg p-2.5 bg-white">
                                 {{-- Assignment name + meta --}}
-                                <div class="flex items-center gap-2 mb-2">
+                                <div class="flex items-center gap-2 mb-2 flex-wrap">
                                     <span class="text-xs font-semibold text-gray-800">{{ $asgn->name }}</span>
                                     <span class="text-xs px-1.5 py-0.5 rounded
                                         {{ $asgn->type === 'formative' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600' }}">
                                         {{ ucfirst($asgn->type) }}
                                     </span>
                                     <span class="text-xs text-gray-400">{{ $asgn->total_marks }} marks</span>
+                                    @if($asgn->lms_connection_id)
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        Moodle
+                                    </span>
+                                    @endif
                                 </div>
 
                                 {{-- === No submission === --}}
@@ -222,6 +228,12 @@
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                             {{ $sub->original_filename }}
                                         </span>
+                                        @if($sub->isFromMoodle())
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            From Moodle
+                                        </span>
+                                        @endif
                                         <form method="POST" class="no-print"
                                               action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}">
                                             @csrf

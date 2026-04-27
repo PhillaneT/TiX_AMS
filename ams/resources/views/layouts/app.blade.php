@@ -108,6 +108,16 @@
             Gradebook
             <span class="ml-auto text-xs bg-navy-700 text-slate-400 px-1.5 py-0.5 rounded">Soon</span>
         </a>
+
+        <div class="pt-3 pb-1">
+            <p class="text-xs text-slate-500 uppercase tracking-wider px-3 font-semibold">Settings</p>
+        </div>
+
+        <a href="{{ route('integrations.index') }}"
+           class="sidebar-link {{ request()->routeIs('integrations.*') ? 'active' : 'text-[#e3b64d]' }}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+            LMS Integrations
+        </a>
     </nav>
 
     {{-- User footer --}}

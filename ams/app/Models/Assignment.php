@@ -12,6 +12,8 @@ class Assignment extends Model
 
     protected $fillable = [
         'qualification_id',
+        'lms_connection_id',
+        'lms_assignment_id',
         'name',
         'description',
         'type',

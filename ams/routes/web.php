@@ -1,16 +1,21 @@
 <?php
 
+use App\Models\LmsConnection;
 use App\Http\Controllers\ActiveContextController;
 use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LearnerController;
+use App\Http\Controllers\LmsConnectionController;
+use App\Http\Controllers\LmsSyncController;
 use App\Http\Controllers\QualificationController;
 use App\Http\Controllers\QualificationModuleController;
 use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\SubmissionController;
 use Illuminate\Support\Facades\Route;
+
+Route::bind('integration', fn ($id) => LmsConnection::findOrFail($id));
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
@@ -98,4 +103,20 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('learners/template', [LearnerController::class, 'downloadTemplate'])->name('learners.template');
+
+    // LMS Integrations
+    Route::prefix('integrations')->name('integrations.')->group(function () {
+        Route::get('/',             [LmsConnectionController::class, 'index'])->name('index');
+        Route::get('/create',       [LmsConnectionController::class, 'create'])->name('create');
+        Route::post('/',            [LmsConnectionController::class, 'store'])->name('store');
+        Route::get('/{integration}/edit',   [LmsConnectionController::class, 'edit'])->name('edit');
+        Route::put('/{integration}',        [LmsConnectionController::class, 'update'])->name('update');
+        Route::delete('/{integration}',     [LmsConnectionController::class, 'destroy'])->name('destroy');
+        Route::post('/{integration}/test',  [LmsConnectionController::class, 'test'])->name('test');
+
+        Route::post('/{integration}/sync',              [LmsSyncController::class, 'sync'])->name('sync');
+        Route::post('/{integration}/sync-submissions',  [LmsSyncController::class, 'syncSubmissions'])->name('sync-submissions');
+        Route::post('/{integration}/push/{submission}', [LmsSyncController::class, 'push'])->name('push');
+        Route::post('/{integration}/fetch-courses',     [LmsSyncController::class, 'fetchCourses'])->name('fetch-courses');
+    });
 });

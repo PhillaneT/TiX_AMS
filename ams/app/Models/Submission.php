@@ -14,6 +14,8 @@ class Submission extends Model
         'assignment_id',
         'learner_id',
         'user_id',
+        'lms_connection_id',
+        'lms_submission_id',
         'original_filename',
         'file_path',
         'status',
@@ -21,13 +23,15 @@ class Submission extends Model
         'marked_at',
         'signed_off_at',
         'emailed_at',
+        'lms_pushed_at',
     ];
 
     protected $casts = [
-        'queued_at'    => 'datetime',
-        'marked_at'    => 'datetime',
+        'queued_at'     => 'datetime',
+        'marked_at'     => 'datetime',
         'signed_off_at' => 'datetime',
-        'emailed_at'   => 'datetime',
+        'emailed_at'    => 'datetime',
+        'lms_pushed_at' => 'datetime',
     ];
 
     public function assignment()
@@ -53,6 +57,16 @@ class Submission extends Model
     public function aiUsage()
     {
         return $this->hasMany(AiUsage::class);
+    }
+
+    public function lmsConnection()
+    {
+        return $this->belongsTo(\App\Models\LmsConnection::class, 'lms_connection_id');
+    }
+
+    public function isFromMoodle(): bool
+    {
+        return $this->lms_connection_id !== null && $this->lms_submission_id !== null;
     }
 
     public function statusBadge(): array
