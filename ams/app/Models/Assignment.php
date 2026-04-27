@@ -36,4 +36,9 @@ class Assignment extends Model
     {
         return $this->belongsToMany(QualificationModule::class, 'assignment_modules');
     }
+
+    public function questions()
+    {
+        return $this->hasMany(Question::class)->orderBy('order')->orderBy('id');
+    }
 }

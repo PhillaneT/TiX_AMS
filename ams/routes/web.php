@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LearnerController;
 use App\Http\Controllers\QualificationController;
 use App\Http\Controllers\QualificationModuleController;
+use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\SubmissionController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,6 +51,14 @@ Route::middleware('auth')->group(function () {
         Route::put('assignments/{assignment}', [AssignmentController::class, 'update'])->name('assignments.update');
         Route::delete('assignments/{assignment}', [AssignmentController::class, 'destroy'])->name('assignments.destroy');
         Route::get('assignments/{assignment}/memo', [AssignmentController::class, 'downloadMemo'])->name('assignments.memo');
+
+        // Questions (nested under assignments)
+        Route::get('assignments/{assignment}/questions/create', [QuestionController::class, 'create'])->name('assignments.questions.create');
+        Route::post('assignments/{assignment}/questions', [QuestionController::class, 'store'])->name('assignments.questions.store');
+        Route::get('assignments/{assignment}/questions/{question}/edit', [QuestionController::class, 'edit'])->name('assignments.questions.edit');
+        Route::put('assignments/{assignment}/questions/{question}', [QuestionController::class, 'update'])->name('assignments.questions.update');
+        Route::delete('assignments/{assignment}/questions/{question}', [QuestionController::class, 'destroy'])->name('assignments.questions.destroy');
+        Route::post('assignments/{assignment}/questions/reorder', [QuestionController::class, 'reorder'])->name('assignments.questions.reorder');
 
         // Cohorts
         Route::resource('cohorts', CohortController::class)

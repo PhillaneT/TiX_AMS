@@ -239,9 +239,6 @@ class SubmissionController extends Controller
 
     private function runMockMarking(\App\Models\Assignment $assignment): array
     {
-        $memoText   = $assignment->memo_text ?? '';
-        $totalMarks = max(1, (int) ($assignment->total_marks ?? 100));
-
         // Resolve effective grading instructions
         $instructions = trim($assignment->ai_instructions ?? '')
             ?: self::DEFAULT_AI_INSTRUCTIONS;
@@ -255,7 +252,21 @@ class SubmissionController extends Controller
             strtoupper($m->module_type) . ': ' . $m->title
         )->implode(' | ');
 
-        $criteria = $this->parseMemo($memoText, $totalMarks);
+        // --- Build criteria from structured questions if available ---
+        $structuredQuestions = $assignment->questions()->get();
+        if ($structuredQuestions->isNotEmpty()) {
+            $criteria = $structuredQuestions->map(fn($q) => [
+                'text'      => ($q->label ? "[{$q->label}] " : '') . $q->question_text,
+                'max_marks' => max(1, (int) $q->marks),
+                'expected_answer'  => $q->expected_answer,
+                'ai_grading_notes' => $q->ai_grading_notes,
+            ])->toArray();
+            $totalMarks = max(1, $structuredQuestions->sum('marks'));
+        } else {
+            $memoText   = $assignment->memo_text ?? '';
+            $totalMarks = max(1, (int) ($assignment->total_marks ?? 100));
+            $criteria   = $this->parseMemo($memoText, $totalMarks);
+        }
 
         $questions    = [];
         $totalAwarded = 0;
@@ -276,10 +287,12 @@ class SubmissionController extends Controller
             $totalAwarded += $awarded;
 
             $questions[] = [
-                'criterion' => $crit['text'],
-                'max_marks' => $crit['max_marks'],
-                'awarded'   => $awarded,
-                'comment'   => $this->mockComment($pct, $moduleContext, $isLenient),
+                'criterion'        => $crit['text'],
+                'max_marks'        => $crit['max_marks'],
+                'awarded'          => $awarded,
+                'comment'          => $this->mockComment($pct, $moduleContext, $isLenient),
+                'expected_answer'  => $crit['expected_answer'] ?? null,
+                'ai_grading_notes' => $crit['ai_grading_notes'] ?? null,
             ];
         }
 

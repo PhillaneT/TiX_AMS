@@ -34,7 +34,7 @@ class AssignmentController extends Controller
             'description'     => ['nullable', 'string'],
             'type'            => ['required', 'in:formative,summative'],
             'total_marks'     => ['nullable', 'integer', 'min:1'],
-            'memo_type'       => ['required', 'in:text,pdf'],
+            'memo_type'       => ['required', 'in:text,pdf,questions'],
             'memo_text'       => ['nullable', 'string', 'required_if:memo_type,text'],
             'memo_file'       => ['nullable', 'file', 'mimes:pdf', 'max:20480', 'required_if:memo_type,pdf'],
             'ai_instructions' => ['nullable', 'string', 'max:3000'],
@@ -66,7 +66,7 @@ class AssignmentController extends Controller
     public function show(Qualification $qualification, Assignment $assignment)
     {
         abort_if($assignment->qualification_id !== $qualification->id, 403);
-        $assignment->load('qualificationModules');
+        $assignment->load('qualificationModules', 'questions');
         return view('assignments.show', compact('qualification', 'assignment'));
     }
 
@@ -85,7 +85,7 @@ class AssignmentController extends Controller
             'description'     => ['nullable', 'string'],
             'type'            => ['required', 'in:formative,summative'],
             'total_marks'     => ['nullable', 'integer', 'min:1'],
-            'memo_type'       => ['required', 'in:text,pdf'],
+            'memo_type'       => ['required', 'in:text,pdf,questions'],
             'memo_text'       => ['nullable', 'string'],
             'memo_file'       => ['nullable', 'file', 'mimes:pdf', 'max:20480'],
             'ai_instructions' => ['nullable', 'string', 'max:3000'],

@@ -83,26 +83,59 @@
                 </div>
 
                 <div class="col-span-2 pt-2 border-t border-gray-100">
-                    <label class="block text-sm font-semibold text-gray-700 mb-3">Marking Memo</label>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Marking Method</label>
+                    <p class="text-xs text-gray-500 mb-3">Per-question is the recommended approach — the AI gets precise, question-level anchors.</p>
 
-                    <div class="flex gap-4 mb-4">
-                        <label class="flex items-center gap-2 cursor-pointer">
+                    <div class="flex flex-col gap-2 mb-4">
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
+                            <input type="radio" name="memo_type" value="questions" id="mt_questions"
+                                {{ old('memo_type', $assignment->memo_type) === 'questions' ? 'checked' : '' }}
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
+                                onchange="toggleMemoType()">
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Per-question memo</span>
+                                <span class="ml-2 text-xs font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Recommended</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Manage individual questions with model answers on the assignment page.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
                             <input type="radio" name="memo_type" value="text" id="mt_text"
                                 {{ old('memo_type', $assignment->memo_type) === 'text' ? 'checked' : '' }}
-                                class="text-orange-600 focus:ring-orange-500"
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
                                 onchange="toggleMemoType()">
-                            <span class="text-sm text-gray-700">Text memo</span>
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Text memo</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Paste a single memo block covering the whole assignment.</p>
+                            </div>
                         </label>
-                        <label class="flex items-center gap-2 cursor-pointer">
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
                             <input type="radio" name="memo_type" value="pdf" id="mt_pdf"
                                 {{ old('memo_type', $assignment->memo_type) === 'pdf' ? 'checked' : '' }}
-                                class="text-orange-600 focus:ring-orange-500"
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
                                 onchange="toggleMemoType()">
-                            <span class="text-sm text-gray-700">Upload PDF memo</span>
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Upload PDF memo</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Upload a PDF document as the memo.</p>
+                            </div>
                         </label>
                     </div>
 
-                    <div id="memo_text_area">
+                    <div id="memo_questions_area">
+                        @php $qCount = $assignment->questions()->count(); @endphp
+                        @if($qCount > 0)
+                            <div class="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800 flex items-center gap-3">
+                                <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                                <span>{{ $qCount }} question{{ $qCount === 1 ? '' : 's' }} defined. <a href="{{ route('qualifications.assignments.show', [$qualification, $assignment]) }}#questions" class="underline font-medium">View &amp; manage questions</a>.</span>
+                            </div>
+                        @else
+                            <div class="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-sm text-orange-800">
+                                <p class="font-medium mb-0.5">No questions added yet.</p>
+                                <p class="text-xs text-orange-700">Save this assignment, then <a href="{{ route('qualifications.assignments.show', [$qualification, $assignment]) }}" class="underline font-medium">go to the assignment page</a> to add questions.</p>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div id="memo_text_area" class="hidden">
                         <textarea name="memo_text" rows="6"
                             class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
                             placeholder="Paste the marking memo / model answers here...">{{ old('memo_text', $assignment->memo_text) }}</textarea>
@@ -144,9 +177,10 @@
 
 <script>
 function toggleMemoType() {
-    const isText = document.getElementById('mt_text').checked;
-    document.getElementById('memo_text_area').classList.toggle('hidden', !isText);
-    document.getElementById('memo_file_area').classList.toggle('hidden', isText);
+    const val = document.querySelector('input[name="memo_type"]:checked')?.value;
+    document.getElementById('memo_questions_area').classList.toggle('hidden', val !== 'questions');
+    document.getElementById('memo_text_area').classList.toggle('hidden', val !== 'text');
+    document.getElementById('memo_file_area').classList.toggle('hidden', val !== 'pdf');
 }
 function showFileName(input) {
     const p = document.getElementById('file_name');

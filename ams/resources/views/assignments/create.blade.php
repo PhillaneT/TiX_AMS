@@ -84,32 +84,57 @@
                     <p class="text-xs text-gray-400 mt-1">These instructions override the system default for this assignment only. Max 3 000 characters.</p>
                 </div>
 
-                {{-- Memo section --}}
+                {{-- Memo / Questions section --}}
                 <div class="col-span-2 pt-2 border-t border-gray-100">
-                    <label class="block text-sm font-semibold text-gray-700 mb-3">Marking Memo</label>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Marking Method</label>
+                    <p class="text-xs text-gray-500 mb-3">Choose how you'll provide the marking memo. Per-question is the recommended approach — the AI gets precise, question-level anchors.</p>
 
-                    <div class="flex gap-4 mb-4">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="memo_type" value="text" id="mt_text"
-                                {{ old('memo_type', 'text') === 'text' ? 'checked' : '' }}
-                                class="text-orange-600 focus:ring-orange-500"
+                    <div class="flex flex-col gap-2 mb-4">
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
+                            <input type="radio" name="memo_type" value="questions" id="mt_questions"
+                                {{ old('memo_type', 'questions') === 'questions' ? 'checked' : '' }}
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
                                 onchange="toggleMemoType()">
-                            <span class="text-sm text-gray-700">Text memo</span>
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Per-question memo</span>
+                                <span class="ml-2 text-xs font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Recommended</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Add each question with its model answer and mark allocation after saving. Gives the AI the best possible context.</p>
+                            </div>
                         </label>
-                        <label class="flex items-center gap-2 cursor-pointer">
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
+                            <input type="radio" name="memo_type" value="text" id="mt_text"
+                                {{ old('memo_type') === 'text' ? 'checked' : '' }}
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
+                                onchange="toggleMemoType()">
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Text memo</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Paste a single memo block covering the whole assignment.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
                             <input type="radio" name="memo_type" value="pdf" id="mt_pdf"
                                 {{ old('memo_type') === 'pdf' ? 'checked' : '' }}
-                                class="text-orange-600 focus:ring-orange-500"
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
                                 onchange="toggleMemoType()">
-                            <span class="text-sm text-gray-700">Upload PDF memo</span>
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Upload PDF memo</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Upload a PDF document as the memo. The AI reads it directly.</p>
+                            </div>
                         </label>
                     </div>
 
-                    <div id="memo_text_area">
+                    <div id="memo_questions_area">
+                        <div class="bg-orange-50 border border-orange-200 rounded-lg px-4 py-4 text-sm text-orange-800">
+                            <p class="font-medium mb-1">Questions are added after saving.</p>
+                            <p class="text-xs text-orange-700">Create the assignment first, then you'll be taken to the assignment page where you can add each question with its model answer and mark allocation.</p>
+                        </div>
+                    </div>
+
+                    <div id="memo_text_area" class="hidden">
                         <textarea name="memo_text" rows="6"
                             class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
                             placeholder="Paste the marking memo / model answers here. The AI marker will use this to evaluate learner submissions.">{{ old('memo_text') }}</textarea>
-                        <p class="text-xs text-gray-400 mt-1">This is used by the AI marker. Be as detailed as possible — include acceptable alternatives and mark allocations per question.</p>
+                        <p class="text-xs text-gray-400 mt-1">Be as detailed as possible — include acceptable alternatives and mark allocations per question.</p>
                     </div>
 
                     <div id="memo_file_area" class="hidden">
@@ -143,9 +168,10 @@
 
 <script>
 function toggleMemoType() {
-    const isText = document.getElementById('mt_text').checked;
-    document.getElementById('memo_text_area').classList.toggle('hidden', !isText);
-    document.getElementById('memo_file_area').classList.toggle('hidden', isText);
+    const val = document.querySelector('input[name="memo_type"]:checked')?.value;
+    document.getElementById('memo_questions_area').classList.toggle('hidden', val !== 'questions');
+    document.getElementById('memo_text_area').classList.toggle('hidden', val !== 'text');
+    document.getElementById('memo_file_area').classList.toggle('hidden', val !== 'pdf');
 }
 
 function showFileName(input) {
