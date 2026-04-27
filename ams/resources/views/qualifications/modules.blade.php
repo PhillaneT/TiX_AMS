@@ -49,7 +49,7 @@ const AMS_MAPPING = @json($mapping);
                        placeholder="e.g. 118708"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-orange-400">
                 <button type="submit"
-                        class="w-full bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold py-2 rounded-lg transition">
+                        class="w-full hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-semibold py-2 rounded-lg transition">
                     Fetch from SAQA
                 </button>
             </form>
@@ -144,7 +144,7 @@ const AMS_MAPPING = @json($mapping);
                             {{ $modules->count() }} Module(s) — Module to Activity Mapping
                         </h2>
                         <button type="submit"
-                                class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
+                                class="hover:bg-orange-700 bg-[#e3b64d] text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
                             Save Mappings
                         </button>
                     </div>
@@ -222,7 +222,7 @@ const AMS_MAPPING = @json($mapping);
                     @if($modules->count() > 3)
                     <div class="px-5 py-3 bg-gray-50 border-t border-gray-200 flex justify-end">
                         <button type="submit"
-                                class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
+                                class="hover:bg-orange-700 bg-[#e3b64d] text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
                             Save Mappings
                         </button>
                     </div>

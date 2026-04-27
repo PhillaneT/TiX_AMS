@@ -240,7 +240,7 @@
                 </div>
 
                 <button type="submit"
-                        class="w-full bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+                        class="w-full hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
                     Sign Off Result
                 </button>
             </form>

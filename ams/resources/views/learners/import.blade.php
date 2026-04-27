@@ -49,7 +49,7 @@
             </div>
 
             <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
-                <button type="submit" class="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors">
+                <button type="submit" class="px-5 py-2.5 hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-medium rounded-lg transition-colors">
                     Import Learners
                 </button>
                 <a href="{{ route('qualifications.cohorts.learners.index', [$qualification, $cohort]) }}"

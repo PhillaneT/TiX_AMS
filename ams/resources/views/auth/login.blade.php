@@ -46,7 +46,7 @@
             </div>
 
             <button type="submit"
-                class="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2">
+                class="w-full hover:bg-orange-700 bg-[#e3b64d] text-white font-medium py-2.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2">
                 Sign in
             </button>
         </form>

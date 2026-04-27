@@ -194,7 +194,7 @@
                                         <span class="text-xs text-gray-400">No submission yet</span>
                                         <button type="button"
                                                 onclick="toggleUpload('{{ $uploadId }}')"
-                                                class="text-xs bg-orange-600 hover:bg-orange-700 text-white font-semibold px-3 py-1 rounded transition">
+                                                class="text-xs hover:bg-orange-700 bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
                                             Upload Submission
                                         </button>
                                     </div>
@@ -257,7 +257,7 @@
                                             </span>
                                         @endif
                                         <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
-                                           class="no-print text-xs bg-orange-600 hover:bg-orange-700 text-white font-semibold px-3 py-1 rounded transition">
+                                           class="no-print text-xs hover:bg-orange-700 bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
                                             Review &amp; Sign Off →
                                         </a>
                                         <button type="button" onclick="toggleUpload('{{ $replaceId }}')"

@@ -45,7 +45,7 @@
         @endif
 
         <button type="submit"
-            class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors">
+            class="px-4 py-2 hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-medium rounded-lg transition-colors">
             Update Context
         </button>
     </form>
