@@ -10,7 +10,7 @@
 <div class="w-full max-w-sm px-4">
 
     <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-12 h-12 bg-orange-600 rounded-xl mb-4">
+        <div class="inline-flex items-center justify-center w-12 h-12 bg-[#1e3a5f] rounded-xl mb-4">
             <span class="text-white font-bold text-lg">AJ</span>
         </div>
         <h1 class="text-2xl font-bold text-gray-900">AjanaNova AMS</h1>
@@ -46,7 +46,7 @@
             </div>
 
             <button type="submit"
-                class="w-full hover:bg-orange-700 bg-[#e3b64d] text-white font-medium py-2.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2">
+                class="w-full hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white font-medium py-2.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2">
                 Sign in
             </button>
         </form>

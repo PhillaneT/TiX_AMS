@@ -1,25 +1,22 @@
 @extends('layouts.app')
 
 @section('title', 'POE — ' . $learner->full_name)
+@section('heading', 'POE: ' . $learner->full_name)
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="hover:text-gray-800 transition-colors">{{ $cohort->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.cohorts.learners.index', [$qualification, $cohort]) }}" class="hover:text-gray-800 transition-colors">Learners</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">{{ $learner->full_name }}</span>
+@endsection
 
 @section('content')
-
-{{-- Breadcrumb --}}
-<div class="mb-6 flex flex-wrap items-center gap-2 text-sm">
-    <a href="{{ route('qualifications.show', $qualification) }}" class="text-gray-500 hover:text-gray-700">
-        {{ $qualification->name }}
-    </a>
-    <span class="text-gray-300">/</span>
-    <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="text-gray-500 hover:text-gray-700">
-        {{ $cohort->name }}
-    </a>
-    <span class="text-gray-300">/</span>
-    <a href="{{ route('qualifications.cohorts.learners.index', [$qualification, $cohort]) }}" class="text-gray-500 hover:text-gray-700">
-        Learners
-    </a>
-    <span class="text-gray-300">/</span>
-    <span class="font-semibold text-gray-800">POE: {{ $learner->full_name }}</span>
-</div>
 
 {{-- Flash messages --}}
 @if(session('success'))
@@ -194,7 +191,7 @@
                                         <span class="text-xs text-gray-400">No submission yet</span>
                                         <button type="button"
                                                 onclick="toggleUpload('{{ $uploadId }}')"
-                                                class="text-xs hover:bg-orange-700 bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
+                                                class="text-xs hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
                                             Upload Submission
                                         </button>
                                     </div>
@@ -257,7 +254,7 @@
                                             </span>
                                         @endif
                                         <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
-                                           class="no-print text-xs hover:bg-orange-700 bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
+                                           class="no-print text-xs hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
                                             Review &amp; Sign Off →
                                         </a>
                                         <button type="button" onclick="toggleUpload('{{ $replaceId }}')"

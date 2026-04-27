@@ -2,7 +2,17 @@
 
 @section('title', 'Learners — ' . $cohort->name)
 @section('heading', 'Learners — ' . $cohort->name)
-@section('breadcrumb', $qualification->name . ' → ' . $cohort->name . ' → Learners')
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="hover:text-gray-800 transition-colors">{{ $cohort->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">Learners</span>
+@endsection
 
 @section('page-actions')
     <a href="{{ route('learners.template') }}"
@@ -11,7 +21,7 @@
         Download Template
     </a>
     <a href="{{ route('qualifications.cohorts.learners.import', [$qualification, $cohort]) }}"
-        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
         Import CSV
     </a>
@@ -31,7 +41,7 @@
                 Download Template
             </a>
             <a href="{{ route('qualifications.cohorts.learners.import', [$qualification, $cohort]) }}"
-                class="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700">
+                class="inline-flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#e3b64d] hover:text-[#1e3a5f]">
                 Import CSV
             </a>
         </div>

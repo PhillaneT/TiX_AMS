@@ -2,7 +2,17 @@
 
 @section('title', $assignment->name . ' — ' . $qualification->name)
 @section('heading', $assignment->name)
-@section('breadcrumb', $qualification->name . ' → Assignments → ' . $assignment->name)
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.assignments.index', $qualification) }}" class="hover:text-gray-800 transition-colors">Assignments</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">{{ $assignment->name }}</span>
+@endsection
 
 @section('page-actions')
     <a href="{{ route('qualifications.assignments.index', $qualification) }}"

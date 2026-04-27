@@ -2,7 +2,17 @@
 
 @section('title', 'Edit Cohort — AjanaNova AMS')
 @section('heading', 'Edit Cohort')
-@section('breadcrumb', $qualification->name . ' → ' . $cohort->name . ' → Edit')
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="hover:text-gray-800 transition-colors">{{ $cohort->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">Edit</span>
+@endsection
 
 @section('content')
 <div class="max-w-2xl mt-2">
@@ -58,7 +68,7 @@
             </div>
 
             <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
-                <button type="submit" class="px-5 py-2.5 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+                <button type="submit" class="px-5 py-2.5 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
                     Save Changes
                 </button>
                 <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="px-5 py-2.5 text-sm text-gray-600 hover:text-gray-900">Cancel</a>

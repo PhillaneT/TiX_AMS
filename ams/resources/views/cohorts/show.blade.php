@@ -2,11 +2,19 @@
 
 @section('title', $cohort->name . ' — AjanaNova AMS')
 @section('heading', $cohort->name)
-@section('breadcrumb', $qualification->name . ' → ' . $cohort->name)
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">{{ $cohort->name }}</span>
+@endsection
 
 @section('page-actions')
     <a href="{{ route('qualifications.cohorts.learners.import', [$qualification, $cohort]) }}"
-        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
         Import Learners
     </a>
     <a href="{{ route('qualifications.cohorts.edit', [$qualification, $cohort]) }}"
@@ -46,7 +54,7 @@
             <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <p class="text-sm text-gray-400 mb-3">No learners in this cohort yet.</p>
                 <a href="{{ route('qualifications.cohorts.learners.import', [$qualification, $cohort]) }}"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700">
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#e3b64d] hover:text-[#1e3a5f]">
                     Import learners from CSV
                 </a>
             </div>

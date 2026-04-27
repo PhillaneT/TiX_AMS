@@ -2,7 +2,13 @@
 
 @section('title', $qualification->name . ' — AjanaNova AMS')
 @section('heading', $qualification->name)
-@section('breadcrumb', 'Qualifications → ' . $qualification->name)
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">{{ $qualification->name }}</span>
+@endsection
 
 @section('page-actions')
     <a href="{{ route('qualifications.assignments.index', $qualification) }}"
@@ -24,7 +30,7 @@
         @endif
     </a>
     <a href="{{ route('qualifications.cohorts.create', $qualification) }}"
-        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Cohort
     </a>
@@ -80,7 +86,7 @@
             <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <p class="text-sm text-gray-400 mb-3">No cohorts yet.</p>
                 <a href="{{ route('qualifications.cohorts.create', $qualification) }}"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700">
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#e3b64d] hover:text-[#1e3a5f]">
                     Add your first cohort
                 </a>
             </div>

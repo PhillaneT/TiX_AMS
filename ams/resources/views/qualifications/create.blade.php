@@ -2,7 +2,13 @@
 
 @section('title', 'New Qualification — AjanaNova AMS')
 @section('heading', 'New Qualification')
-@section('breadcrumb', 'Qualifications → New')
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">New Qualification</span>
+@endsection
 
 @section('content')
 <div class="max-w-2xl mt-2 space-y-4">
@@ -107,7 +113,7 @@
 
             <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
                 <button type="submit"
-                    class="px-5 py-2.5 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+                    class="px-5 py-2.5 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
                     Create Qualification
                 </button>
                 <a href="{{ route('qualifications.index') }}" class="px-5 py-2.5 text-sm text-gray-600 hover:text-gray-900">Cancel</a>

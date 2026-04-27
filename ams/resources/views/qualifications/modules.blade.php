@@ -1,14 +1,18 @@
 @extends('layouts.app')
 
 @section('title', 'Qualification Modules — ' . $qualification->name)
+@section('heading', 'Qualification Modules')
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">Modules</span>
+@endsection
 
 @section('content')
-<div class="mb-6 flex items-center gap-3">
-    <a href="{{ route('qualifications.show', $qualification) }}"
-       class="text-sm text-gray-500 hover:text-gray-700">&#8592; {{ $qualification->name }}</a>
-    <span class="text-gray-300">/</span>
-    <h1 class="text-xl font-bold text-gray-800">Qualification Modules</h1>
-</div>
 
 @if(session('success'))
     <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800 text-sm">
@@ -49,7 +53,7 @@ const AMS_MAPPING = @json($mapping);
                        placeholder="e.g. 118708"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-orange-400">
                 <button type="submit"
-                        class="w-full hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-semibold py-2 rounded-lg transition">
+                        class="w-full hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white text-sm font-semibold py-2 rounded-lg transition">
                     Fetch from SAQA
                 </button>
             </form>
@@ -144,7 +148,7 @@ const AMS_MAPPING = @json($mapping);
                             {{ $modules->count() }} Module(s) — Module to Activity Mapping
                         </h2>
                         <button type="submit"
-                                class="hover:bg-orange-700 bg-[#e3b64d] text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
+                                class="hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
                             Save Mappings
                         </button>
                     </div>
@@ -222,7 +226,7 @@ const AMS_MAPPING = @json($mapping);
                     @if($modules->count() > 3)
                     <div class="px-5 py-3 bg-gray-50 border-t border-gray-200 flex justify-end">
                         <button type="submit"
-                                class="hover:bg-orange-700 bg-[#e3b64d] text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
+                                class="hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition">
                             Save Mappings
                         </button>
                     </div>

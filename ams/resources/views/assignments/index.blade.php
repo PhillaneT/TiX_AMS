@@ -2,7 +2,15 @@
 
 @section('title', 'Assignments — ' . $qualification->name)
 @section('heading', 'Assignments')
-@section('breadcrumb', $qualification->name . ' → Assignments')
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">Assignments</span>
+@endsection
 
 @section('page-actions')
     <a href="{{ route('qualifications.show', $qualification) }}"
@@ -10,7 +18,7 @@
         ← Qualification
     </a>
     <a href="{{ route('qualifications.assignments.create', $qualification) }}"
-        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+        class="inline-flex items-center gap-2 px-4 py-2 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Assignment
     </a>
@@ -41,7 +49,7 @@
             </svg>
             <p class="text-sm text-gray-400 mb-4">No assignments yet for this qualification.</p>
             <a href="{{ route('qualifications.assignments.create', $qualification) }}"
-                class="inline-flex items-center gap-2 px-4 py-2 hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-medium rounded-lg">
+                class="inline-flex items-center gap-2 px-4 py-2 hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white text-sm font-medium rounded-lg">
                 Create your first assignment
             </a>
         </div>

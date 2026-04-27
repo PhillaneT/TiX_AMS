@@ -1,25 +1,22 @@
 @extends('layouts.app')
 
 @section('title', 'Marking Result — ' . $submission->assignment->name)
+@section('heading', $submission->assignment->name)
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="hover:text-gray-800 transition-colors">{{ $cohort->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}" class="hover:text-gray-800 transition-colors">{{ $learner->full_name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">{{ $submission->assignment->name }}</span>
+@endsection
 
 @section('content')
-
-{{-- Breadcrumb --}}
-<div class="mb-6 flex flex-wrap items-center gap-2 text-sm">
-    <a href="{{ route('qualifications.show', $qualification) }}" class="text-gray-500 hover:text-gray-700">
-        {{ $qualification->name }}
-    </a>
-    <span class="text-gray-300">/</span>
-    <a href="{{ route('qualifications.cohorts.show', [$qualification, $cohort]) }}" class="text-gray-500 hover:text-gray-700">
-        {{ $cohort->name }}
-    </a>
-    <span class="text-gray-300">/</span>
-    <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}" class="text-gray-500 hover:text-gray-700">
-        POE: {{ $learner->full_name }}
-    </a>
-    <span class="text-gray-300">/</span>
-    <span class="font-semibold text-gray-800">{{ $submission->assignment->name }}</span>
-</div>
 
 {{-- Flash --}}
 @if(session('success'))
@@ -240,7 +237,7 @@
                 </div>
 
                 <button type="submit"
-                        class="w-full hover:bg-orange-700 bg-[#e3b64d] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+                        class="w-full hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
                     Sign Off Result
                 </button>
             </form>

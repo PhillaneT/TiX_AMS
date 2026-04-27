@@ -2,7 +2,19 @@
 
 @section('title', 'Edit — ' . $assignment->name)
 @section('heading', 'Edit Assignment')
-@section('breadcrumb', $qualification->name . ' → Assignments → Edit')
+@section('breadcrumbs')
+    <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.index') }}" class="hover:text-gray-800 transition-colors">Qualifications</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.show', $qualification) }}" class="hover:text-gray-800 transition-colors">{{ $qualification->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.assignments.index', $qualification) }}" class="hover:text-gray-800 transition-colors">Assignments</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <a href="{{ route('qualifications.assignments.show', [$qualification, $assignment]) }}" class="hover:text-gray-800 transition-colors">{{ $assignment->name }}</a>
+    <span class="text-gray-300 mx-0.5">›</span>
+    <span class="text-gray-700 font-medium">Edit</span>
+@endsection
 
 @section('page-actions')
     <a href="{{ route('qualifications.assignments.show', [$qualification, $assignment]) }}"
@@ -120,7 +132,7 @@
 
             <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
                 <button type="submit"
-                    class="px-5 py-2.5 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
+                    class="px-5 py-2.5 hover:bg-[#e3b64d] hover:text-[#1e3a5f] text-white text-sm font-medium rounded-lg transition-colors bg-[#1e3a5f]">
                     Save Changes
                 </button>
                 <a href="{{ route('qualifications.assignments.show', [$qualification, $assignment]) }}"
