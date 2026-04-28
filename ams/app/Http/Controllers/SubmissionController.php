@@ -691,8 +691,16 @@ class SubmissionController extends Controller
     private function suggestAnnotations(array $questions, string $filePath): array
     {
         try {
-            $pageTexts  = (new TextExtractor())->extractPerPage($filePath);
-            $totalPages = max(1, count($pageTexts));
+            $extractor  = new TextExtractor();
+            $pageTexts  = $extractor->extractPerPage($filePath);
+
+            // If text extraction yielded nothing (scanned/image PDF), still get
+            // the real page count so stamps distribute across pages rather than
+            // all landing on page 1.
+            $totalPages = !empty($pageTexts)
+                ? count($pageTexts)
+                : $extractor->countPages($filePath);
+
             return (new AnnotationSuggester())->suggest($questions, $pageTexts, $totalPages);
         } catch (\Throwable $e) {
             Log::warning('AnnotationSuggester failed: ' . $e->getMessage());
