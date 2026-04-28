@@ -452,9 +452,7 @@
 @push('scripts')
 @if($isPdf && $result)
 {{-- PDF.js must load before the inline script runs so window.pdfjsLib is available --}}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
-        integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf1TFfUhS+KBaYSLg=="
-        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 // ─── Data from server ────────────────────────────────────────────────────────
 const PDF_URL         = @json($fileUrl);
