@@ -116,63 +116,21 @@ class AnnotationSuggester
     }
 
     /**
-     * Estimate vertical position (0→1, top-down) from line-based text matching.
+     * Return the vertical position (0→1, top-down) for a criterion row.
      *
-     * Skips the first 15% of lines to avoid locking onto page headings/images
-     * that appear at the very top but don't correspond to answer content.
-     * Falls back to even slot spacing when no line match is found.
+     * Keyword-to-line matching is unreliable for styled workbooks: smalot
+     * extracts text lines but has no awareness of banner images that occupy
+     * the top 30-40% of the visual page, so a line at position 2-of-15 can
+     * map to y≈0.16 which sits inside the image area on screen.
+     *
+     * Instead we use slot-based spacing starting below the typical banner zone
+     * (y = 0.42). The assessor then uses the viewer to drag stamps to the exact
+     * answer location — this gives them a clean, predictable starting spread.
      */
     private function estimateY(string $criterion, string $pageText, int $slot): float
     {
-        $slotY = min(0.92, 0.08 + ($slot * self::MIN_Y_GAP));
-
-        if (empty($pageText) || empty($criterion)) {
-            return $slotY;
-        }
-
-        $lines = array_values(array_filter(
-            explode("\n", $pageText),
-            fn($l) => trim($l) !== ''
-        ));
-
-        $totalLines = count($lines);
-        if ($totalLines < 3) {
-            return $slotY;
-        }
-
-        $keywords = $this->extractKeywords($criterion);
-        if (empty($keywords)) {
-            return $slotY;
-        }
-
-        // Skip the top 15% of lines — headings and banner images often sit here
-        // and attract false matches that push all stamps to the top of the page.
-        $skipLines = (int) ceil($totalLines * 0.15);
-
-        $bestLine  = -1;
-        $bestScore = 0;
-
-        foreach ($lines as $lineIdx => $line) {
-            if ($lineIdx < $skipLines) continue;
-
-            $lower = mb_strtolower($line);
-            $score = 0;
-            foreach ($keywords as $kw) {
-                if (str_contains($lower, $kw)) {
-                    $score++;
-                }
-            }
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestLine  = $lineIdx;
-            }
-        }
-
-        if ($bestLine >= 0) {
-            return round(0.04 + (($bestLine / max(1, $totalLines - 1)) * 0.88), 4);
-        }
-
-        return $slotY;
+        // Start below the typical top-banner area; space rows 5.5% apart.
+        return min(0.93, 0.42 + ($slot * self::MIN_Y_GAP));
     }
 
     /**
