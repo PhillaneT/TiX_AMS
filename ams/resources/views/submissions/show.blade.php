@@ -540,7 +540,11 @@ async function initViewer() {
         renderAllStamps();
     } catch (err) {
         document.getElementById('pdf-loading').classList.add('hidden');
-        document.getElementById('pdf-error').classList.remove('hidden');
+        const errEl = document.getElementById('pdf-error');
+        errEl.classList.remove('hidden');
+        // Surface the actual error so we can diagnose
+        const detail = err?.message || String(err);
+        errEl.textContent = `Could not load PDF preview: ${detail}`;
         console.error('PDF viewer error:', err);
     }
 }

@@ -611,17 +611,14 @@ class SubmissionController extends Controller
         Learner $learner, Submission $submission
     ) {
         abort_if($submission->learner_id !== $learner->id, 404);
-        abort_unless(Storage::exists($submission->file_path), 404);
 
-        $mime = Storage::mimeType($submission->file_path) ?: 'application/pdf';
+        $absolutePath = Storage::path($submission->file_path);
 
-        return response()->stream(function () use ($submission) {
-            $stream = Storage::readStream($submission->file_path);
-            fpassthru($stream);
-            fclose($stream);
-        }, 200, [
-            'Content-Type'        => $mime,
-            'Content-Disposition' => 'inline; filename="' . addslashes($submission->original_filename) . '"',
+        abort_unless(file_exists($absolutePath), 404, 'Submission file not found on disk.');
+
+        return response()->file($absolutePath, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . rawurlencode($submission->original_filename) . '"',
             'Cache-Control'       => 'private, no-store',
         ]);
     }
