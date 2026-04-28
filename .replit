@@ -41,3 +41,4 @@ run = ["php", "-S", "0.0.0.0:5000", "-t", "."]
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
+timeoutMs = 120000
