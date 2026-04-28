@@ -90,6 +90,10 @@ Route::middleware('auth')->group(function () {
                     ->name('submissions.store');
                 Route::get('submissions/{submission}', [SubmissionController::class, 'show'])
                     ->name('submissions.show');
+                Route::get('submissions/{submission}/file', [SubmissionController::class, 'serveFile'])
+                    ->name('submissions.file');
+                Route::post('submissions/{submission}/annotations', [SubmissionController::class, 'saveAnnotations'])
+                    ->name('submissions.annotations');
                 Route::post('submissions/{submission}/mark', [SubmissionController::class, 'mark'])
                     ->name('submissions.mark');
                 Route::post('submissions/{submission}/signoff', [SubmissionController::class, 'signOff'])

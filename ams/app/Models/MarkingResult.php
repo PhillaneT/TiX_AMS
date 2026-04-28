@@ -12,6 +12,7 @@ class MarkingResult extends Model
         'ai_recommendation',
         'confidence',
         'questions_json',
+        'annotations_json',
         'moderation_notes',
         'mock_mode',
         'assessor_override',
@@ -24,10 +25,11 @@ class MarkingResult extends Model
     ];
 
     protected $casts = [
-        'questions_json'   => 'array',
-        'mock_mode'        => 'boolean',
+        'questions_json'    => 'array',
+        'annotations_json'  => 'array',
+        'mock_mode'         => 'boolean',
         'assessor_override' => 'boolean',
-        'signed_off_at'    => 'datetime',
+        'signed_off_at'     => 'datetime',
     ];
 
     public function submission()

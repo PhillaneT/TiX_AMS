@@ -9,7 +9,11 @@ use App\Models\Learner;
 use App\Models\MarkingResult;
 use App\Models\Qualification;
 use App\Models\Submission;
+use App\Services\Pdf\AnnotationSuggester;
+use App\Services\Pdf\Annotator;
+use App\Services\Pdf\TextExtractor;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class SubmissionController extends Controller
@@ -91,12 +95,19 @@ class SubmissionController extends Controller
             default          => 'LOW',
         };
 
+        // Suggest stamp positions — try to match criteria to PDF pages
+        $annotations = $this->suggestAnnotations(
+            $marking['questions'],
+            Storage::path($submission->file_path)
+        );
+
         $result = MarkingResult::create([
             'submission_id'    => $submission->id,
             'user_id'          => auth()->id(),
             'ai_recommendation'=> $marking['verdict'],
             'confidence'       => $confidence,
             'questions_json'   => $marking['questions'],
+            'annotations_json' => $annotations,
             'mock_mode'        => $mockMode,
             'assessor_override'=> false,
             'final_verdict'    => $marking['verdict'],
@@ -170,6 +181,9 @@ class SubmissionController extends Controller
             'signed_off_at' => now(),
         ]);
 
+        // Bake final annotations into a locked PDF
+        $this->bakeAnnotatedPdf($submission);
+
         AuditLog::record('submission.signed_off', $submission, [
             'verdict'  => $request->input('final_verdict'),
             'override' => $override,
@@ -177,7 +191,7 @@ class SubmissionController extends Controller
 
         return redirect()
             ->route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner])
-            ->with('success', 'Result signed off successfully.');
+            ->with('success', 'Result signed off. Annotated PDF generated.');
     }
 
     // -------------------------------------------------------
@@ -586,5 +600,138 @@ class SubmissionController extends Controller
         $mean = array_sum($pcts) / count($pcts);
         $var  = array_sum(array_map(fn($p) => ($p - $mean) ** 2, $pcts)) / count($pcts);
         return $var;
+    }
+
+    // -------------------------------------------------------
+    // Serve the original submission PDF to the browser
+    // (files are stored in private/ storage — not public)
+    // -------------------------------------------------------
+    public function serveFile(
+        Qualification $qualification, Cohort $cohort,
+        Learner $learner, Submission $submission
+    ) {
+        abort_if($submission->learner_id !== $learner->id, 404);
+        abort_unless(Storage::exists($submission->file_path), 404);
+
+        $mime = Storage::mimeType($submission->file_path) ?: 'application/pdf';
+
+        return response()->stream(function () use ($submission) {
+            $stream = Storage::readStream($submission->file_path);
+            fpassthru($stream);
+            fclose($stream);
+        }, 200, [
+            'Content-Type'        => $mime,
+            'Content-Disposition' => 'inline; filename="' . addslashes($submission->original_filename) . '"',
+            'Cache-Control'       => 'private, no-store',
+        ]);
+    }
+
+    // -------------------------------------------------------
+    // Save assessor-edited annotations + per-criterion marks
+    // Called via fetch() from the PDF annotation viewer
+    // -------------------------------------------------------
+    public function saveAnnotations(
+        Request $request,
+        Qualification $qualification, Cohort $cohort,
+        Learner $learner, Submission $submission
+    ) {
+        abort_if($submission->learner_id !== $learner->id, 404);
+
+        $data = $request->validate([
+            'annotations'          => ['required', 'array'],
+            'annotations.*.page'   => ['required', 'integer', 'min:1'],
+            'annotations.*.x_pct'  => ['required', 'numeric', 'min:0', 'max:1'],
+            'annotations.*.y_pct'  => ['required', 'numeric', 'min:0', 'max:1'],
+            'annotations.*.type'   => ['required', 'in:tick,cross'],
+            'questions'            => ['nullable', 'array'],
+        ]);
+
+        $stamps = array_map(fn($s) => [
+            'page'            => (int) $s['page'],
+            'x_pct'           => round((float) $s['x_pct'], 4),
+            'y_pct'           => round((float) $s['y_pct'], 4),
+            'type'            => $s['type'],
+            'criterion_index' => isset($s['criterion_index']) ? (int) $s['criterion_index'] : null,
+            'criterion'       => mb_substr((string) ($s['criterion'] ?? ''), 0, 100),
+        ], $data['annotations']);
+
+        $result = $submission->markingResult;
+        abort_unless($result, 422);
+
+        $updates = ['annotations_json' => $stamps];
+
+        // Also persist any per-criterion mark / comment edits
+        if (!empty($data['questions'])) {
+            $existing = $result->questions_json ?? [];
+            foreach ($data['questions'] as $idx => $q) {
+                if (!isset($existing[$idx])) continue;
+                if (array_key_exists('awarded', $q)) {
+                    $existing[$idx]['awarded'] = max(0, min(
+                        (int) $existing[$idx]['max_marks'],
+                        (int) $q['awarded']
+                    ));
+                }
+                if (array_key_exists('comment', $q)) {
+                    $existing[$idx]['comment'] = mb_substr((string) $q['comment'], 0, 500);
+                }
+            }
+            $updates['questions_json'] = $existing;
+        }
+
+        $result->update($updates);
+
+        AuditLog::record('submission.annotations_saved', $submission, [
+            'stamp_count' => count($stamps),
+        ]);
+
+        return response()->json(['ok' => true, 'count' => count($stamps)]);
+    }
+
+    // -------------------------------------------------------
+    // PRIVATE HELPERS
+    // -------------------------------------------------------
+
+    private function suggestAnnotations(array $questions, string $filePath): array
+    {
+        try {
+            $pageTexts  = (new TextExtractor())->extractPerPage($filePath);
+            $totalPages = max(1, count($pageTexts));
+            return (new AnnotationSuggester())->suggest($questions, $pageTexts, $totalPages);
+        } catch (\Throwable $e) {
+            Log::warning('AnnotationSuggester failed: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function bakeAnnotatedPdf(Submission $submission): void
+    {
+        $result = $submission->markingResult;
+        if (!$result) return;
+
+        $stamps = $result->annotations_json ?? [];
+        if (empty($stamps)) return;
+
+        $ext = strtolower(pathinfo($submission->original_filename, PATHINFO_EXTENSION));
+        if ($ext !== 'pdf') return; // only PDF submissions can be annotated server-side
+
+        try {
+            $sourcePath = Storage::path($submission->file_path);
+            $outDir     = "private/annotated/{$submission->learner_id}/{$submission->id}";
+            $outFile    = $outDir . '/annotated_' . $submission->original_filename;
+            $outAbs     = Storage::path($outFile);
+
+            if (!is_dir(dirname($outAbs))) {
+                mkdir(dirname($outAbs), 0755, true);
+            }
+
+            (new Annotator())->annotate($sourcePath, $stamps, $outAbs);
+
+            $result->update([
+                'annotated_pdf_path' => $outFile,
+                'pdf_hash'           => hash_file('sha256', $outAbs),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('PDF annotation bake failed: ' . $e->getMessage());
+        }
     }
 }

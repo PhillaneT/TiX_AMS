@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Dashboard — TiXMark IQ')
+@section('title', 'Dashboard — AjanaNova AMS')
 @section('heading', 'Dashboard')
 
 @section('page-actions')
