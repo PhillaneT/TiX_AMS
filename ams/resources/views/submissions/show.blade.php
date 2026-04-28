@@ -451,6 +451,10 @@
 
 @push('scripts')
 @if($isPdf && $result)
+{{-- PDF.js must load before the inline script runs so window.pdfjsLib is available --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf1TFfUhS+KBaYSLg=="
+        crossorigin="anonymous"></script>
 <script>
 // ─── Data from server ────────────────────────────────────────────────────────
 const PDF_URL         = @json($fileUrl);
@@ -516,7 +520,8 @@ document.getElementById('btn-save-ann').addEventListener('click', saveAnnotation
 // ─── PDF.js init ──────────────────────────────────────────────────────────────
 async function initViewer() {
     try {
-        const pdfjsLib = window['pdfjs-dist/build/pdf'];
+        const pdfjsLib = window.pdfjsLib;
+        if (!pdfjsLib) throw new Error('PDF.js not loaded');
         pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -864,9 +869,6 @@ document.getElementById('btn-save-criteria')?.addEventListener('click', async ()
     }
 });
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
-        integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf1TFfUhS+KBaYSLg=="
-        crossorigin="anonymous"></script>
 @endif
 @endpush
 
