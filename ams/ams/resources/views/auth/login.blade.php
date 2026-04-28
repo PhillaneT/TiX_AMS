@@ -3,18 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In — AjanaNova AMS</title>
+    <title>Sign In — TiXMark IQ</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="h-full flex items-center justify-center">
+<body class="h-full flex items-center justify-center bg-[#f5f5f0]">
 <div class="w-full max-w-sm px-4">
 
     <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-12 h-12 bg-[#1e3a5f] rounded-xl mb-4">
-            <span class="text-white font-bold text-lg">AJ</span>
-        </div>
-        <h1 class="text-2xl font-bold text-gray-900">AjanaNova AMS</h1>
-        <p class="text-sm text-gray-500 mt-1">Assessor Management System</p>
+        <img src="/images/tixmark-logo.png" alt="TiXMark IQ" class="h-36 mx-auto object-contain">
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -53,7 +49,7 @@
     </div>
 
     <p class="text-center text-xs text-gray-400 mt-6">
-        AjanaNova Grader &mdash; SAQA/QCTO Compliant Assessment Platform
+        TiXMark IQ &mdash; Intelligent marking you can trust
     </p>
 </div>
 </body>
