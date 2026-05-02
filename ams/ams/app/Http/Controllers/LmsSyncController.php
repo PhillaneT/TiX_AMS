@@ -9,6 +9,7 @@ use App\Models\Learner;
 use App\Models\LmsConnection;
 use App\Models\Submission;
 use App\Services\MoodleService;
+use App\Services\MoodlePushService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -219,23 +220,9 @@ class LmsSyncController extends Controller
             return redirect()->back()->with('error', 'Cannot push to Moodle: the learner\'s Moodle user ID is not set. The learner must have been imported via Moodle sync (external_ref = moodle_{id}).');
         }
 
-        $moodleAssignId  = (int) $submission->assignment->lms_assignment_id;
-        $grade           = $this->verdictToGrade($result->final_verdict, $result);
-        $feedbackText    = $this->buildFeedbackText($result);
-
-        // Prefer the graded annotated PDF, then the cover letter PDF, then the raw submission.
-        [$pdfContents, $pdfFilename] = $this->resolveGradedPdf($submission, $result);
-
         try {
-            $service    = new MoodleService($integration);
-            $pushResult = $service->pushGrade(
-                $moodleAssignId,
-                $moodleUserId,
-                $grade,
-                $feedbackText,
-                $pdfContents,
-                $pdfFilename
-            );
+            $pushService = new MoodlePushService($integration);
+            $pushResult  = $pushService->pushToMoodle($submission);
         } catch (\Exception $e) {
             $integration->update(['last_error' => $e->getMessage()]);
 
@@ -253,13 +240,17 @@ class LmsSyncController extends Controller
 
         AuditLog::record('lms.submission.pushed', $submission, [
             'connection_id'    => $integration->id,
-            'moodle_assign_id' => $moodleAssignId,
-            'grade'            => $grade,
+            'moodle_assign_id' => (int) $submission->assignment->lms_assignment_id,
             'verdict'          => $result->final_verdict,
+            'push_method'      => $pushResult['method'] ?? 'unknown',
         ]);
 
-        return redirect()->back()
-            ->with('success', 'Grade and feedback pushed to Moodle successfully.');
+        $method  = $pushResult['method'] ?? 'simple';
+        $message = str_starts_with($method, 'advanced_')
+            ? 'Grade, criterion scores, and feedback pushed to Moodle (advanced grading).'
+            : 'Grade and feedback pushed to Moodle successfully.';
+
+        return redirect()->back()->with('success', $message);
     }
 
     /**
