@@ -283,8 +283,9 @@ class MoodlePushService
         Log::info('fetchGradingDefinition: calling core_grading_get_definitions', ['cmid' => $cmid]);
 
         $result = $this->apiCall('core_grading_get_definitions', [
-            'cmids[0]' => $cmid,
-            'includes' => 'all',
+            'cmids[0]'   => $cmid,
+            'areaname'   => 'submissions',
+            'activeonly' => 1,
         ]);
 
         if (! $result['ok']) {
