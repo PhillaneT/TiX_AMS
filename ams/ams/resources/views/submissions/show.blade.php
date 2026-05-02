@@ -1031,7 +1031,8 @@ document.querySelectorAll('.ai-reasoning-toggle').forEach(btn => {
         if (!target) return;
         const isHidden = target.classList.contains('hidden');
         target.classList.toggle('hidden', !isHidden);
-        btn.querySelector('.toggle-label').textContent = isHidden ? 'Hide AI Reasoning' : 'View AI Reasoning';
+        const label = btn.querySelector('.toggle-label');
+        if (label) label.textContent = isHidden ? 'Hide AI Reasoning' : 'AI Reasoning';
     });
 });
 
@@ -1356,36 +1357,52 @@ document.querySelectorAll('.criteria-comment').forEach(input => {
     input.addEventListener('input', enableCriteriaSave);
 });
 
-// Rubric level buttons — clicking a level sets the hidden mark input
+// Rubric level buttons — clicking a level sets the hidden mark input and
+// updates the visual grid highlighting (ring-based, matches the new grid design)
 document.querySelectorAll('.rubric-level-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const idx   = parseInt(btn.dataset.idx);
         const score = parseFloat(btn.dataset.score);
         const max   = parseFloat(btn.dataset.max);
 
-        // Update the hidden criteria-mark input
+        // Update the hidden criteria-mark input → triggers stamp + total recalc
         const inp = document.getElementById('awarded-' + idx);
         if (inp) {
             inp.value = score;
-            inp.dispatchEvent(new Event('input')); // triggers stamp + total updates
+            inp.dispatchEvent(new Event('input'));
         }
 
-        // Re-colour all buttons in this criterion row
+        // Re-style every level cell in this criterion (ring highlight for selected)
         document.querySelectorAll(`.rubric-level-btn[data-idx="${idx}"]`).forEach(b => {
             const bScore = parseFloat(b.dataset.score);
-            const bPct   = max > 0 ? bScore / max : 0;
-            const active = bScore === score;
-            b.className = b.className
-                .replace(/bg-\S+|text-\S+|border-\S+/g, '')
-                .trim();
+            const bMax   = parseFloat(b.dataset.max) || 1;
+            const active = Math.abs(bScore - score) < 0.01;
+            const bPct   = bScore / bMax;
+
+            // Remove previous state classes
+            b.classList.remove(
+                'bg-green-50', 'bg-red-50', 'bg-white',
+                'ring-2', 'ring-inset', 'ring-green-500', 'ring-red-400',
+                'hover:bg-gray-50'
+            );
+            // Remove existing check badge if any
+            b.querySelectorAll('.rubric-sel-badge').forEach(el => el.remove());
+
             if (active) {
-                b.classList.add(
-                    bPct >= 0.5 ? 'bg-green-600' : 'bg-red-500',
-                    'text-white',
-                    bPct >= 0.5 ? 'border-green-600' : 'border-red-500'
-                );
+                if (bPct >= 0.5) {
+                    b.classList.add('bg-green-50', 'ring-2', 'ring-inset', 'ring-green-500');
+                } else {
+                    b.classList.add('bg-red-50', 'ring-2', 'ring-inset', 'ring-red-400');
+                }
+                // Add check badge
+                const badge = document.createElement('span');
+                badge.className = 'rubric-sel-badge absolute top-1.5 right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-black ' +
+                    (bPct >= 0.5 ? 'bg-green-500 text-white' : 'bg-red-500 text-white');
+                badge.textContent = bPct >= 0.5 ? '✓' : '✗';
+                b.style.position = 'relative';
+                b.appendChild(badge);
             } else {
-                b.classList.add('bg-white', 'text-gray-600', 'border-gray-200', 'hover:bg-gray-50');
+                b.classList.add('bg-white', 'hover:bg-gray-50');
             }
         });
 
