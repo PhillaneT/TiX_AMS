@@ -88,8 +88,11 @@
         </div>
     </div>
 
-    {{-- ── BAR 1: STATUS — one tidy row of equal-height pills ─────── --}}
-    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/40 flex flex-wrap items-start gap-2">
+    {{-- ── BAR 1: STATUS — one tidy row of equal-height pills ──────────
+         items-stretch forces every pill to the height of the tallest one.
+         The Grading Rules dropdown body is position:absolute, so opening
+         it does NOT push siblings taller. ──────────────────────────── --}}
+    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/40 flex flex-wrap items-stretch gap-2">
 
         {{-- Submission Status --}}
         <div class="inline-flex flex-col justify-center px-3.5 py-2 rounded-lg border-2 {{ $stBox }} min-w-[140px]">
