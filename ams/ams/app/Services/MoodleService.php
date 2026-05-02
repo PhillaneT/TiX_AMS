@@ -96,6 +96,29 @@ class MoodleService
     }
 
     /**
+     * Fetch a Moodle user's profile by their user ID.
+     * Returns ['id', 'fullname', 'firstname', 'lastname', 'email'] or throws on failure.
+     */
+    public function getUser(int $userId): array
+    {
+        $result = $this->call('core_user_get_users_by_field', [
+            'field'     => 'id',
+            'values[0]' => $userId,
+        ]);
+
+        if (! $result['ok']) {
+            throw new \RuntimeException('Moodle user fetch failed: ' . $result['error']);
+        }
+
+        $users = $result['data'];
+        if (empty($users[0])) {
+            throw new \RuntimeException("Moodle user #{$userId} not found.");
+        }
+
+        return $users[0];
+    }
+
+    /**
      * Fetch submissions for a specific assignment.
      */    
     public function getSubmissions(int $assignmentId): array
