@@ -64,7 +64,8 @@ class LmsSyncController extends Controller
         $hadPartialFailure    = false;
 
         foreach ($moodleAssignments as $moodleAssignment) {
-            $moodleAssignId  = (string) ($moodleAssignment['id'] ?? '');
+            $moodleAssignId  = (string) ($moodleAssignment['id']   ?? '');
+            $moodleCmid      = (string) ($moodleAssignment['cmid'] ?? '');
             $moodleCourseId  = (string) ($moodleAssignment['course_id'] ?? '');
             $moodleCourseName = $moodleAssignment['course_name'] ?? ('Course ' . $moodleCourseId);
 
@@ -76,12 +77,17 @@ class LmsSyncController extends Controller
 
             if ($existing) {
                 $assignmentsSkipped++;
+                // Always keep cmid up-to-date (may have been missing on first import)
+                if ($moodleCmid && $existing->lms_cmid !== $moodleCmid) {
+                    $existing->update(['lms_cmid' => $moodleCmid]);
+                }
                 $assignment = $existing;
             } else {
                 $assignment = Assignment::create([
                     'qualification_id'  => $qualificationId,
                     'lms_connection_id' => $integration->id,
                     'lms_assignment_id' => $moodleAssignId,
+                    'lms_cmid'          => $moodleCmid ?: null,
                     'name'              => $moodleAssignment['name'] ?? ('Moodle Assignment ' . $moodleAssignId),
                     'description'       => strip_tags($moodleAssignment['intro'] ?? ''),
                     'type'              => 'summative',

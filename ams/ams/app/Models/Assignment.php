@@ -14,6 +14,7 @@ class Assignment extends Model
         'qualification_id',
         'lms_connection_id',
         'lms_assignment_id',
+        'lms_cmid',
         'name',
         'description',
         'type',

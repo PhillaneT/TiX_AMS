@@ -204,8 +204,17 @@ class MoodlePushService
      * Returns ['method' => 'guide'|'rubric', 'criteria' => [...]] or null when
      * no advanced grading is configured.
      */
-    private function fetchGradingDefinition(int $cmid): ?array
+    private function fetchGradingDefinition(int $assignmentId): ?array
     {
+        // core_grading_get_definitions needs the course module ID (cmid), NOT the
+        // assignment's internal DB id.  Look it up from the stored lms_cmid column.
+        $assignment = \App\Models\Assignment::where('lms_assignment_id', (string) $assignmentId)->first();
+        $cmid       = $assignment?->lms_cmid ? (int) $assignment->lms_cmid : null;
+
+        if (! $cmid) {
+            return null; // cmid not yet synced — fall through to simple push
+        }
+
         $result = $this->apiCall('core_grading_get_definitions', [
             'cmids[0]' => $cmid,
             'includes' => 'all',
