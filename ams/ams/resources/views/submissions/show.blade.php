@@ -90,33 +90,46 @@
             @endif
 
             {{-- Grading rules — collapsible stamp (third card) --}}
-            <details class="rounded-xl border-2 border-blue-200 bg-blue-50 text-left grading-rules-card">
+            @php $hasCustomRules = trim($submission->assignment->ai_instructions ?? '') !== ''; @endphp
+            <details class="rounded-xl border-2 {{ $hasCustomRules ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-gray-50' }} text-left grading-rules-card">
                 <summary class="px-4 py-3 cursor-pointer select-none list-none flex flex-col items-center justify-center gap-0.5 h-full">
-                    <span class="text-xs font-semibold text-blue-600">Grading Rules</span>
-                    <span class="text-sm font-bold text-blue-700 flex items-center gap-1">
-                        View Rules
+                    <span class="text-xs font-semibold {{ $hasCustomRules ? 'text-blue-600' : 'text-gray-500' }}">Grading Rules</span>
+                    <span class="text-sm font-bold {{ $hasCustomRules ? 'text-blue-700' : 'text-gray-700' }} flex items-center gap-1">
+                        @if($hasCustomRules)
+                            <svg class="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                            Custom Rules
+                        @else
+                            System Default
+                        @endif
                         <svg class="w-3 h-3 rules-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
                         </svg>
                     </span>
-                    <span class="text-xs text-blue-400 mt-0.5">click to expand</span>
+                    <span class="text-xs {{ $hasCustomRules ? 'text-blue-400' : 'text-gray-400' }} mt-0.5">click to expand</span>
                 </summary>
-                <div class="px-4 pb-4 pt-2 border-t border-blue-200" style="max-width:380px">
+                <div class="px-4 pb-4 pt-2 border-t {{ $hasCustomRules ? 'border-blue-200' : 'border-gray-200' }}" style="max-width:380px">
                     @if($mappedModules->isNotEmpty())
                     <div class="mb-2">
-                        <span class="text-xs text-blue-600 font-semibold">Module Scope: </span>
+                        <span class="text-xs {{ $hasCustomRules ? 'text-blue-600' : 'text-gray-600' }} font-semibold">Module Scope: </span>
                         @foreach($mappedModules as $m)
                             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold mr-1
                                 {{ ['KM'=>'bg-blue-100 text-blue-800','PM'=>'bg-green-100 text-green-800','WM'=>'bg-orange-100 text-orange-800','US'=>'bg-purple-100 text-purple-800'][strtoupper($m->module_type)] ?? 'bg-gray-100 text-gray-700' }}">
                                 {{ strtoupper($m->module_type) }}
                             </span>
-                            <span class="text-xs text-blue-700">{{ $m->title }}</span>
+                            <span class="text-xs {{ $hasCustomRules ? 'text-blue-700' : 'text-gray-700' }}">{{ $m->title }}</span>
                         @endforeach
                     </div>
                     @endif
-                    <p class="text-xs text-blue-700 leading-relaxed">{{ $effectiveInstructions }}</p>
-                    @if(! trim($submission->assignment->ai_instructions ?? ''))
-                        <p class="text-xs text-blue-400 mt-1 italic">System default.</p>
+                    @if($hasCustomRules)
+                        <p class="text-[10px] uppercase tracking-wide font-semibold text-green-700 mb-1">Custom rules from assignment</p>
+                        <p class="text-xs text-blue-700 leading-relaxed whitespace-pre-line">{{ $submission->assignment->ai_instructions }}</p>
+                    @else
+                        <p class="text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">System default (no custom rules on this assignment)</p>
+                        <p class="text-xs text-gray-700 leading-relaxed">{{ $effectiveInstructions }}</p>
+                        <a href="{{ route('qualifications.assignments.edit', [$qualification, $submission->assignment]) }}"
+                           class="inline-block mt-2 text-xs text-orange-600 hover:text-orange-700 font-medium">
+                            + Add custom grading rules to this assignment
+                        </a>
                     @endif
                 </div>
             </details>
@@ -143,17 +156,29 @@
 <div id="review-area">
 
     {{-- ── Marking toolbar ───────────────────────────────────── --}}
-    <div class="review-toolbar flex items-center justify-between mb-4">
+    <div class="review-toolbar flex items-center justify-between mb-4 flex-wrap gap-2">
         <p class="text-xs text-gray-400">
             Reviewing: <strong class="text-gray-600">{{ $learner->full_name }}</strong>
             &mdash; {{ $submission->assignment->name }}
         </p>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
             <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}"
                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white
                       text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition shadow-sm">
                 ← Back to POE
             </a>
+
+            {{-- Quick anchor: Sign Off (only when review is needed) --}}
+            @if($submission->status === 'review_required' && $result)
+            <a href="#signoff-form"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50
+                      text-xs font-semibold text-amber-700 hover:bg-amber-100 transition shadow-sm"
+               title="Jump to sign-off form">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Sign Off ↓
+            </a>
+            @endif
+
             <button id="btn-fullscreen" type="button"
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white
                            text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition shadow-sm"
@@ -176,6 +201,106 @@
             </button>
         </div>
     </div>
+
+{{-- ── Action bar (Final Verdict summary + Moodle sync) above the marking columns ── --}}
+@if(($submission->status === 'signed_off' && $result) || $submission->isFromMoodle())
+<div class="mb-4 flex flex-wrap items-stretch gap-3">
+
+    {{-- Final Verdict pill + PDF download buttons + Re-open --}}
+    @if($submission->status === 'signed_off' && $result)
+    @php $fc = $result->final_verdict === 'COMPETENT'; @endphp
+    <div class="flex items-stretch gap-2 flex-wrap rounded-xl border-2 {{ $fc ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50' }} p-2 pr-3">
+        <div class="flex flex-col justify-center px-3">
+            <div class="text-[10px] uppercase tracking-wide font-semibold {{ $fc ? 'text-green-600' : 'text-red-600' }}">Final Verdict</div>
+            <div class="text-sm font-black {{ $fc ? 'text-green-700' : 'text-red-700' }}">
+                {{ $fc ? '✓ COMPETENT' : '✗ NOT YET COMPETENT' }}
+            </div>
+            <div class="text-[10px] {{ $fc ? 'text-green-600/70' : 'text-red-600/70' }} mt-0.5">
+                Signed by {{ $result->assessor_name }}@if($result->signed_off_at) · {{ $result->signed_off_at->format('d M Y') }}@endif
+            </div>
+        </div>
+
+        @if($result->cover_pdf_path)
+        <a href="{{ route('qualifications.cohorts.learners.submissions.declaration', [$qualification, $cohort, $learner, $submission]) }}"
+           target="_blank"
+           class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold transition self-center"
+           title="Declaration cover + marked PDF (return to learner)">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/></svg>
+            Declaration PDF
+        </a>
+        @endif
+
+        @if($result->annotated_pdf_path)
+        <a href="{{ route('qualifications.cohorts.learners.submissions.annotated', [$qualification, $cohort, $learner, $submission]) }}"
+           target="_blank"
+           class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition self-center"
+           title="Annotated submission only (no cover)">
+            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/></svg>
+            Annotated PDF
+        </a>
+        @endif
+
+        @if(! $result->cover_pdf_path && ! $result->annotated_pdf_path)
+        <span class="self-center inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white/70 text-xs text-gray-500 italic"
+              title="Submission may not have been a PDF, or no stamps were placed.">
+            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            No PDF generated
+        </span>
+        @endif
+
+        <form method="POST" class="self-center"
+              action="{{ route('qualifications.cohorts.learners.submissions.reopen', [$qualification, $cohort, $learner, $submission]) }}"
+              onsubmit="return confirm('Re-open this submission for re-assessment?')">
+            @csrf
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-600 hover:text-orange-700 hover:border-orange-300 transition">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Re-open
+            </button>
+        </form>
+
+        @if($result->assessor_override)
+        <span class="self-center text-[10px] px-2 py-0.5 rounded bg-yellow-50 text-yellow-700 border border-yellow-200">
+            Assessor override
+        </span>
+        @endif
+    </div>
+    @endif
+
+    {{-- Moodle sync pill + push button --}}
+    @if($submission->isFromMoodle())
+    <div class="flex items-stretch gap-2 flex-wrap rounded-xl border-2 border-orange-200 bg-orange-50 p-2 pr-3">
+        <div class="flex flex-col justify-center px-3">
+            <div class="text-[10px] uppercase tracking-wide font-semibold text-orange-600 flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Moodle Sync
+            </div>
+            @if($submission->lms_pushed_at)
+            <div class="text-xs font-semibold text-green-700">Pushed {{ $submission->lms_pushed_at->format('d M H:i') }}</div>
+            <div class="text-[10px] text-orange-600/70 mt-0.5">Re-push to update grade</div>
+            @else
+            <div class="text-xs font-semibold text-orange-700">From Moodle</div>
+            <div class="text-[10px] text-orange-600/70 mt-0.5">
+                @if($submission->status === 'signed_off')Ready to push@else Sign off first @endif
+            </div>
+            @endif
+        </div>
+
+        @if($submission->status === 'signed_off')
+        <form method="POST" class="self-center" action="{{ route('integrations.push', [$submission->lms_connection_id, $submission]) }}">
+            @csrf
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold transition">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                {{ $submission->lms_pushed_at ? 'Re-push to Moodle' : 'Push to Moodle' }}
+            </button>
+        </form>
+        @endif
+    </div>
+    @endif
+
+</div>
+@endif
 
 <div class="review-columns flex gap-5 items-start">
 
@@ -681,11 +806,14 @@
                 </div>{{-- /viewer-body --}}
             </div>{{-- /panel card --}}
 
-        {{-- ── Sign-off / Verdict / Moodle (scrolls below PDF within column) ── --}}
+        {{-- ── Sign-off form (scrolls below PDF within column) ──
+             Note: signed-off Final Verdict and Moodle Sync blocks have been
+             promoted to the action bar above the review columns. Only the
+             multi-field sign-off form remains here. ── --}}
         <div class="mt-4 space-y-4 pb-4">
 
         @if($submission->status === 'review_required' && $result)
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div id="signoff-form" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 scroll-mt-4">
             <h3 class="text-sm font-semibold text-gray-800 mb-1">Assessor Sign-Off</h3>
             <p class="text-xs text-gray-400 mb-4">Save mark &amp; annotation changes first. An Assessor Declaration cover page will be prepended to the returned PDF.</p>
 
@@ -750,102 +878,16 @@
         </div>
         @endif
 
-        @if($submission->status === 'signed_off' && $result)
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <h3 class="text-sm font-semibold text-gray-800 mb-3">Final Verdict</h3>
-            @php $fc = $result->final_verdict === 'COMPETENT'; @endphp
-            <div class="text-center py-2">
-                <div class="text-2xl font-black {{ $fc ? 'text-green-700' : 'text-red-700' }}">
-                    {{ $fc ? '✓ COMPETENT' : '✗ NOT YET COMPETENT' }}
-                </div>
-                <div class="text-xs text-gray-500 mt-1">
-                    Signed off by {{ $result->assessor_name }}
-                    @if($result->signed_off_at) on {{ $result->signed_off_at->format('d M Y') }}@endif
-                    @if($result->etqa_registration) &bull; ETQA: {{ $result->etqa_registration }}@endif
-                </div>
-                @if($result->assessor_override)
-                <div class="mt-2 text-xs px-2 py-1 rounded bg-yellow-50 text-yellow-700 border border-yellow-200">
-                    Assessor override — verdict differs from AI recommendation.
-                </div>
-                @endif
-                @if($result->moderation_notes)
-                <div class="mt-2 text-xs text-left bg-gray-50 border border-gray-200 rounded p-2 text-gray-600">
-                    <strong>Notes:</strong> {{ $result->moderation_notes }}
-                </div>
-                @endif
-            </div>
-
-            {{-- PDF downloads --}}
-            <div class="mt-4 space-y-2">
-                @if($result->cover_pdf_path)
-                <a href="{{ route('qualifications.cohorts.learners.submissions.declaration', [$qualification, $cohort, $learner, $submission]) }}"
-                   target="_blank"
-                   class="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-sm font-semibold transition">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    <span class="flex-1 text-left">View Declaration + Marked PDF</span>
-                    <span class="text-xs opacity-70">Return to learner</span>
-                </a>
-                @endif
-
-                @if($result->annotated_pdf_path)
-                <a href="{{ route('qualifications.cohorts.learners.submissions.annotated', [$qualification, $cohort, $learner, $submission]) }}"
-                   target="_blank"
-                   class="flex items-center gap-2 w-full px-4 py-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm transition">
-                    <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    <span class="flex-1 text-left font-medium">View Annotated Submission Only</span>
-                    <span class="text-xs text-gray-400">stamps only, no cover</span>
-                </a>
-                @endif
-
-                @if(! $result->cover_pdf_path && ! $result->annotated_pdf_path)
-                <p class="text-xs text-gray-400 text-center">
-                    No PDF was generated — submission may not have been a PDF file or had no stamps placed.
-                </p>
-                @endif
-            </div>
-
-            <form method="POST" class="mt-3"
-                  action="{{ route('qualifications.cohorts.learners.submissions.reopen', [$qualification, $cohort, $learner, $submission]) }}"
-                  onsubmit="return confirm('Re-open this submission for re-assessment?')">
-                @csrf
-                <button type="submit"
-                        class="w-full text-xs text-gray-500 hover:text-orange-700 border border-gray-200 hover:border-orange-300 px-4 py-1.5 rounded-lg transition">
-                    Re-open for Re-assessment
-                </button>
-            </form>
-        </div>
-        @endif
-
-        @if($submission->isFromMoodle())
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div class="flex items-center gap-2 mb-3">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    From Moodle
-                </span>
-                <h3 class="text-sm font-semibold text-gray-800">Moodle Sync</h3>
-            </div>
-            @if($submission->lms_pushed_at)
-            <div class="mb-3 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-xs text-green-700">
-                Pushed to Moodle on {{ $submission->lms_pushed_at->format('d M Y H:i') }}
-            </div>
+        {{-- Moderation notes (kept here when signed off — extra detail too long for the action bar) --}}
+        @if($submission->status === 'signed_off' && $result && ($result->moderation_notes || $result->etqa_registration))
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 text-xs text-gray-600 space-y-2">
+            @if($result->etqa_registration)
+                <div><strong class="text-gray-700">ETQA Registration:</strong> {{ $result->etqa_registration }}</div>
             @endif
-            @if($submission->status === 'signed_off')
-            <form method="POST" action="{{ route('integrations.push', [$submission->lms_connection_id, $submission]) }}">
-                @csrf
-                <button type="submit"
-                        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition">
-                    Push to Moodle
-                </button>
-            </form>
-            @else
-            <p class="text-xs text-gray-500">Sign off first to enable Moodle push.</p>
+            @if($result->moderation_notes)
+                <div class="bg-gray-50 border border-gray-200 rounded p-2">
+                    <strong class="text-gray-700">Moderation Notes:</strong> {{ $result->moderation_notes }}
+                </div>
             @endif
         </div>
         @endif
