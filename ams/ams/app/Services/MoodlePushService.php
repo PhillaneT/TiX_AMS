@@ -317,10 +317,15 @@ class MoodlePushService
 
         $def      = $definitions[0];
         $criteria = match ($method) {
-            'guide'  => $def['guide']['criteria']  ?? [],
-            'rubric' => $def['rubric']['criteria'] ?? [],
+            'guide'  => $def['guide']['criteria']          ?? [],
+            'rubric' => $def['rubric']['rubric_criteria']  ?? $def['rubric']['criteria'] ?? [],
             default  => [],
         };
+
+        Log::info('fetchGradingDefinition: criteria extracted', [
+            'method'         => $method,
+            'criteria_count' => count($criteria),
+        ]);
 
         return ['method' => $method, 'criteria' => $criteria];
     }
