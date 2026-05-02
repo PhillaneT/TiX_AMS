@@ -55,6 +55,30 @@ The AMS reuses the plugin's PHP AI/PDF code (prompt builder, Anthropic client, P
 - POPIA Operator Agreement workflow + Information Officer registration.
 - Assessor/moderator registration certificate storage + expiry alerts.
 
+### ⚠️ Open issue — Moodle push pipeline needs rework (logged 2026-05-02)
+
+The "Push to Moodle" action on a signed-off submission is currently **incomplete**:
+- **Rubric levels** are not pushed back into the Moodle advanced grading rubric. The
+  `MoodlePushService` falls back to a simple grade because it can't match our criteria
+  to Moodle's advanced grading definition (see log: *"Advanced grading definition has
+  no criteria"* / *"advanced push failed, falling back to simple"*).
+- **Numeric grades** push as a single overall mark — the per-criterion breakdown the
+  AMS calculated is lost on the Moodle side.
+- **Annotated PDF** is uploaded as a feedback file via the draft area, but it has not
+  been verified to consistently appear against the assignment in Moodle (needs an
+  end-to-end test on a real Moodle install).
+
+**Next phase TODO** for Moodle integration:
+1. Build a proper rubric-criteria mapping step when an AMS assignment is linked to a
+   Moodle advanced-grading assignment (fetch Moodle rubric definition once at link time,
+   store the criterion-id ↔ AMS-criterion-name mapping on the assignment).
+2. Push per-criterion levels using `gradingform_rubric_controller::update_grade` payload
+   shape (see Moodle `mod_assign_save_grade` advanced grading docs).
+3. Verify the annotated PDF reaches the Moodle assignment as a feedback file (and that
+   its filename + locked permissions survive the Moodle file API round-trip).
+4. Add a "push status" indicator on the AMS submission row that reflects which parts of
+   the push succeeded (grade ✓ / rubric ✗ / PDF ✓) instead of a single boolean.
+
 ### Session 5 additions (2026-04-27) — Moodle LMS Integration & Sync
 
 **New migrations:**
