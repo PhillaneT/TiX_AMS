@@ -255,8 +255,184 @@
                 </div>
             </div>
 
-            {{-- ── Scrollable table area ────────────────────────────────── --}}
+            {{-- ── Scrollable body area ─────────────────────────────────── --}}
             <div class="flex-1 overflow-y-auto">
+
+            @if($isRubric)
+            {{-- ════════════════════════════════════════════════════════════
+                 RUBRIC GRID — criterion rows × level columns
+                 (mirrors the column-format rubric in the reference image)
+                 ════════════════════════════════════════════════════════════ --}}
+            @php
+                // Collect all unique level count across criteria so we can
+                // build a consistent header. Use the widest criterion as guide.
+                $maxLevelCount = 1;
+                foreach ($rubricMap as $levels) {
+                    $maxLevelCount = max($maxLevelCount, count($levels));
+                }
+            @endphp
+
+            <div id="rubric-grid">
+                @foreach($questions as $i => $q)
+                @php
+                    $qPct    = $q['max_marks'] > 0 ? $q['awarded'] / $q['max_marks'] : 0;
+                    $stampBg = $qPct >= 0.5 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600';
+                    $stamp   = $qPct >= 0.5 ? '✓' : '✗';
+                    $hasReasoning = ! empty($q['expected_answer']) || ! empty($q['ai_grading_notes']) || ! empty($q['comment']);
+                    $rawCrit = $q['criterion'] ?? $q['question'] ?? '—';
+                    $critLabel = null; $critText = $rawCrit;
+                    if (preg_match('/^\[([^\]]{1,30})\]\s*(.+)/su', $rawCrit, $cm)) {
+                        $critLabel = $cm[1]; $critText = trim($cm[2]);
+                    } elseif (preg_match('/^([A-Z]{2,5}-[\d]{2,3}-[A-Z]{2,5}[\d]*(?:[\.\d]*)?)\s*:\s*(.+)/su', $rawCrit, $cm)) {
+                        $critLabel = $cm[1]; $critText = trim($cm[2]);
+                    }
+                    $levels = isset($rubricMap[$i])
+                        ? collect($rubricMap[$i])->sortBy('score')->values()->toArray()
+                        : [];
+                    $maxLvlScore = collect($levels)->max('score') ?: 1;
+                @endphp
+
+                {{-- ── Criterion card ─────────────────────────────────── --}}
+                <div class="border-b border-gray-200 last:border-b-0" data-row="{{ $i }}">
+
+                    {{-- Level row: criterion label + level cells side-by-side --}}
+                    <div class="flex min-h-[5rem]">
+
+                        {{-- Left: criterion name cell (dark header column) --}}
+                        <div class="flex-shrink-0 flex flex-col justify-between bg-[#2d3748] text-white p-3"
+                             style="width:11rem">
+                            <div>
+                                @if($critLabel)
+                                <span class="inline-block mb-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-white/20 text-white/80">{{ $critLabel }}</span>
+                                @endif
+                                <p class="text-xs font-semibold leading-snug">{{ $critText }}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5 mt-2">
+                                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold {{ $stampBg }}"
+                                      id="row-stamp-{{ $i }}">{{ $stamp }}</span>
+                                <span class="text-[10px] text-white/60">/ {{ $q['max_marks'] }} pts</span>
+                            </div>
+                        </div>
+
+                        {{-- Right: level cells --}}
+                        <div class="flex flex-1 divide-x divide-gray-200">
+                            @if(! empty($levels))
+                                @foreach($levels as $lvl)
+                                @php
+                                    $lvlScore   = (float) ($lvl['score'] ?? 0);
+                                    $lvlScoreInt = (int) $lvlScore;
+                                    $awardedVal = (float) $q['awarded'];
+                                    $isSelected = abs($awardedVal - $lvlScore) < 0.01;
+                                    $lvlPct     = $maxLvlScore > 0 ? $lvlScore / $maxLvlScore : 0;
+                                    // Selected: green highlight (pass) or red highlight (fail)
+                                    // Unselected: white with subtle hover
+                                    $cellBg = $isSelected
+                                        ? ($lvlPct >= 0.5 ? 'bg-green-50 ring-2 ring-inset ring-green-500' : 'bg-red-50 ring-2 ring-inset ring-red-400')
+                                        : 'bg-white hover:bg-gray-50';
+                                    $scoreCls = $lvlPct >= 0.5 ? 'text-green-700' : 'text-red-600';
+                                    $selectedIcon = $isSelected ? ($lvlPct >= 0.5 ? '✓' : '✗') : '';
+                                @endphp
+                                <button type="button"
+                                        class="rubric-level-btn flex-1 text-left p-2.5 text-xs transition relative {{ $cellBg }}"
+                                        data-idx="{{ $i }}"
+                                        data-score="{{ $lvlScore }}"
+                                        data-max="{{ $q['max_marks'] }}">
+                                    @if($isSelected)
+                                    <span class="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-black {{ $lvlPct >= 0.5 ? 'bg-green-500 text-white' : 'bg-red-500 text-white' }}">{{ $selectedIcon }}</span>
+                                    @endif
+                                    <p class="text-gray-700 leading-snug pr-4">{{ $lvl['description'] ?? '' }}</p>
+                                    <p class="mt-2 font-bold italic {{ $scoreCls }}">{{ $lvlScoreInt }} points</p>
+                                </button>
+                                @endforeach
+                            @else
+                                {{-- Fallback if no rubric levels mapped: show plain number input --}}
+                                <div class="flex-1 flex items-center justify-center">
+                                    <input type="number"
+                                           id="awarded-{{ $i }}"
+                                           data-idx="{{ $i }}"
+                                           data-max="{{ $q['max_marks'] }}"
+                                           value="{{ $q['awarded'] }}"
+                                           min="0" max="{{ $q['max_marks'] }}"
+                                           class="criteria-mark w-16 text-center text-sm font-bold border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                                    <span class="ml-1 text-xs text-gray-400">/ {{ $q['max_marks'] }}</span>
+                                </div>
+                            @endif
+                        </div>
+
+                    </div>{{-- /level row --}}
+
+                    {{-- Hidden criteria-mark input (keeps save/dirty/total JS working) --}}
+                    @if(! empty($levels))
+                    <input type="number"
+                           id="awarded-{{ $i }}"
+                           data-idx="{{ $i }}"
+                           data-max="{{ $q['max_marks'] }}"
+                           value="{{ $q['awarded'] }}"
+                           min="0" max="{{ $q['max_marks'] }}"
+                           class="criteria-mark sr-only">
+                    @endif
+
+                    {{-- Assessor comment row --}}
+                    <div class="px-3 py-2 bg-gray-50 border-t border-gray-100 flex items-start gap-2">
+                        <svg class="w-3.5 h-3.5 text-orange-400 mt-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
+                        <textarea id="comment-{{ $i }}"
+                                  data-idx="{{ $i }}"
+                                  rows="1"
+                                  maxlength="500"
+                                  placeholder="Assessor comment…"
+                                  class="criteria-comment flex-1 text-xs border-0 bg-transparent focus:outline-none focus:ring-0 text-gray-700 resize-none leading-snug">{{ $q['comment'] ?? '' }}</textarea>
+                        @if($hasReasoning)
+                        <button type="button"
+                                class="ai-reasoning-toggle flex-shrink-0 text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 whitespace-nowrap"
+                                data-target="reasoning-{{ $i }}">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span class="toggle-label">AI Reasoning</span>
+                        </button>
+                        @endif
+                    </div>
+
+                    {{-- AI Reasoning expandable --}}
+                    @if($hasReasoning)
+                    <div id="reasoning-{{ $i }}" class="hidden border-t border-blue-100 bg-blue-50 px-3 py-3 text-xs space-y-2">
+                        @if(! empty($q['comment']))
+                        <div class="flex gap-2">
+                            <span class="font-semibold text-blue-700 whitespace-nowrap">AI Comment:</span>
+                            <span class="text-blue-800">{{ $q['comment'] }}</span>
+                        </div>
+                        @endif
+                        @if(! empty($q['expected_answer']))
+                        <div class="flex gap-2">
+                            <span class="font-semibold text-indigo-700 whitespace-nowrap">Expected Answer:</span>
+                            <span class="text-indigo-800">{{ $q['expected_answer'] }}</span>
+                        </div>
+                        @endif
+                        @if(! empty($q['ai_grading_notes']))
+                        <div class="flex gap-2">
+                            <span class="font-semibold text-purple-700 whitespace-nowrap">Grading Notes:</span>
+                            <span class="text-purple-800">{{ $q['ai_grading_notes'] }}</span>
+                        </div>
+                        @endif
+                    </div>
+                    @endif
+
+                </div>{{-- /criterion card --}}
+                @endforeach
+
+                {{-- Total row --}}
+                <div class="border-t-2 border-gray-200 bg-gray-50 flex items-center justify-between px-4 py-2">
+                    <span class="text-sm font-bold text-gray-700">
+                        Total <span id="pct-cell" class="ml-2 text-xs font-normal text-gray-400">{{ $pct }}%</span>
+                    </span>
+                    <span class="text-sm font-black" id="total-cell">
+                        <span class="{{ $pct >= 50 ? 'text-green-700' : 'text-red-700' }}">{{ $totalAwarded }} / {{ $totalMax }}</span>
+                    </span>
+                </div>
+            </div>{{-- /rubric-grid --}}
+
+            @else
+            {{-- ════════════════════════════════════════════════════════════
+                 STANDARD QUESTION TABLE (non-rubric assignments)
+                 ════════════════════════════════════════════════════════════ --}}
             <table class="w-full text-sm" id="criteria-table">
                 <thead>
                     <tr class="bg-gray-50 border-y border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -272,46 +448,30 @@
                         $stampBg = $qPct >= 0.5 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600';
                         $stamp   = $qPct >= 0.5 ? '✓' : '✗';
                         $hasReasoning = ! empty($q['expected_answer']) || ! empty($q['ai_grading_notes']) || ! empty($q['comment']);
-
-                        // Split "LABEL: Question text" or "[LABEL] Question text" into badge + text
                         $rawCrit = $q['criterion'] ?? $q['question'] ?? '—';
-                        $critLabel = null;
-                        $critText  = $rawCrit;
+                        $critLabel = null; $critText = $rawCrit;
                         if (preg_match('/^\[([^\]]{1,30})\]\s*(.+)/su', $rawCrit, $cm)) {
-                            $critLabel = $cm[1];
-                            $critText  = trim($cm[2]);
+                            $critLabel = $cm[1]; $critText = trim($cm[2]);
                         } elseif (preg_match('/^([A-Z]{2,5}-[\d]{2,3}-[A-Z]{2,5}[\d]*(?:[\.\d]*)?)\s*:\s*(.+)/su', $rawCrit, $cm)) {
-                            $critLabel = $cm[1];
-                            $critText  = trim($cm[2]);
+                            $critLabel = $cm[1]; $critText = trim($cm[2]);
                         }
                     @endphp
-
-                    {{-- Main row --}}
                     <tr class="border-t border-gray-100 hover:bg-gray-50 align-top" data-row="{{ $i }}">
                         <td class="px-3 pt-3 pb-2">
                             <span class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold {{ $stampBg }}"
                                   id="row-stamp-{{ $i }}">{{ $stamp }}</span>
                         </td>
-
-                        {{-- Question text + assessor comment (stacked, prominent) --}}
                         <td class="px-3 pt-3 pb-2">
-                            {{-- Criterion label badge (if extracted) --}}
                             @if($critLabel)
                             <span class="inline-block mb-1 px-1.5 py-0.5 rounded text-xs font-mono font-semibold bg-gray-100 text-gray-500">{{ $critLabel }}</span>
                             @endif
-
-                            {{-- Actual question text --}}
                             <p class="text-sm font-medium text-gray-800 leading-snug mb-2">{{ $critText }}</p>
-
-                            {{-- Assessor comment — the prominent piece --}}
                             <textarea id="comment-{{ $i }}"
                                       data-idx="{{ $i }}"
                                       rows="2"
                                       maxlength="500"
                                       placeholder="Assessor feedback / comment…"
                                       class="criteria-comment w-full text-sm border-l-4 border-orange-300 bg-orange-50 rounded-r px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:bg-white text-gray-700 resize-none transition-colors leading-snug">{{ $q['comment'] ?? '' }}</textarea>
-
-                            {{-- AI Reasoning toggle --}}
                             @if($hasReasoning)
                             <button type="button"
                                     class="ai-reasoning-toggle mt-1 text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
@@ -321,48 +481,7 @@
                             </button>
                             @endif
                         </td>
-
-                        {{-- Marks --}}
                         <td class="px-3 pt-3 pb-2 text-center">
-                            @if($isRubric && ! empty($rubricMap[$i]))
-                            {{-- Rubric level selector --}}
-                            @php
-                                $levels = collect($rubricMap[$i])->sortBy('score')->values();
-                                $maxLvlScore = $levels->max('score') ?: 1;
-                            @endphp
-                            <div class="flex flex-col gap-1 items-stretch min-w-[7rem]">
-                                @foreach($levels as $lvl)
-                                @php
-                                    $lvlScore   = (int) ($lvl['score'] ?? 0);
-                                    $isSelected = ((int) $q['awarded']) === $lvlScore;
-                                    $lvlPct     = $lvlScore / $maxLvlScore;
-                                    $btnColour  = $isSelected
-                                        ? ($lvlPct >= 0.5 ? 'bg-green-600 text-white border-green-600' : 'bg-red-500 text-white border-red-500')
-                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
-                                @endphp
-                                <button type="button"
-                                        class="rubric-level-btn w-full text-left text-xs border rounded px-2 py-1 leading-tight transition {{ $btnColour }}"
-                                        data-idx="{{ $i }}"
-                                        data-score="{{ $lvlScore }}"
-                                        data-max="{{ $q['max_marks'] }}"
-                                        title="{{ $lvl['description'] ?? '' }}">
-                                    <span class="font-bold">{{ $lvlScore }}pts</span>
-                                    @if(! empty($lvl['description']))
-                                    <span class="block text-[10px] leading-tight opacity-80 truncate max-w-[9rem]">{{ Str::limit($lvl['description'], 40) }}</span>
-                                    @endif
-                                </button>
-                                @endforeach
-                            </div>
-                            {{-- Hidden number input keeps the existing save/dirty JS working --}}
-                            <input type="number"
-                                   id="awarded-{{ $i }}"
-                                   data-idx="{{ $i }}"
-                                   data-max="{{ $q['max_marks'] }}"
-                                   value="{{ $q['awarded'] }}"
-                                   min="0" max="{{ $q['max_marks'] }}"
-                                   class="criteria-mark sr-only">
-                            <div class="text-xs text-gray-400 mt-1">/ {{ $q['max_marks'] }}</div>
-                            @else
                             <input type="number"
                                    id="awarded-{{ $i }}"
                                    data-idx="{{ $i }}"
@@ -371,37 +490,24 @@
                                    min="0" max="{{ $q['max_marks'] }}"
                                    class="criteria-mark w-14 text-center text-sm font-bold border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-2 focus:ring-orange-300 {{ $qPct >= 0.5 ? 'text-green-700' : 'text-red-600' }}">
                             <div class="text-xs text-gray-400 mt-0.5">/ {{ $q['max_marks'] }}</div>
-                            @endif
                         </td>
                     </tr>
-
-                    {{-- AI Reasoning expandable row --}}
                     @if($hasReasoning)
                     <tr id="reasoning-{{ $i }}" class="hidden border-t border-blue-100 bg-blue-50">
                         <td></td>
                         <td colspan="2" class="px-3 py-3 text-xs space-y-2">
                             @if(! empty($q['comment']))
-                            <div class="flex gap-2">
-                                <span class="font-semibold text-blue-700 whitespace-nowrap">AI Comment:</span>
-                                <span class="text-blue-800">{{ $q['comment'] }}</span>
-                            </div>
+                            <div class="flex gap-2"><span class="font-semibold text-blue-700 whitespace-nowrap">AI Comment:</span><span class="text-blue-800">{{ $q['comment'] }}</span></div>
                             @endif
                             @if(! empty($q['expected_answer']))
-                            <div class="flex gap-2">
-                                <span class="font-semibold text-indigo-700 whitespace-nowrap">Expected Answer:</span>
-                                <span class="text-indigo-800">{{ $q['expected_answer'] }}</span>
-                            </div>
+                            <div class="flex gap-2"><span class="font-semibold text-indigo-700 whitespace-nowrap">Expected Answer:</span><span class="text-indigo-800">{{ $q['expected_answer'] }}</span></div>
                             @endif
                             @if(! empty($q['ai_grading_notes']))
-                            <div class="flex gap-2">
-                                <span class="font-semibold text-purple-700 whitespace-nowrap">Grading Notes:</span>
-                                <span class="text-purple-800">{{ $q['ai_grading_notes'] }}</span>
-                            </div>
+                            <div class="flex gap-2"><span class="font-semibold text-purple-700 whitespace-nowrap">Grading Notes:</span><span class="text-purple-800">{{ $q['ai_grading_notes'] }}</span></div>
                             @endif
                         </td>
                     </tr>
                     @endif
-
                     @endforeach
                 </tbody>
                 <tfoot>
@@ -415,8 +521,9 @@
                     </tr>
                 </tfoot>
             </table>
+            @endif
 
-            </div>{{-- /scrollable table area --}}
+            </div>{{-- /scrollable body area --}}
 
             {{-- ── Fixed save button (always visible at bottom) ─────────── --}}
             <div class="flex-shrink-0 px-5 py-3 border-t border-gray-100 flex items-center gap-3 bg-white">
