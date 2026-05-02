@@ -128,7 +128,9 @@
 </div>
 
 @php
-    $isPdf      = strtolower(pathinfo($submission->original_filename, PATHINFO_EXTENSION)) === 'pdf';
+    $isPdfExt   = strtolower(pathinfo($submission->original_filename, PATHINFO_EXTENSION)) === 'pdf';
+    $fileOnDisk = $submission->file_path && Storage::exists($submission->file_path);
+    $isPdf      = $isPdfExt && $fileOnDisk;
     $fileUrl    = route('qualifications.cohorts.learners.submissions.file',        [$qualification, $cohort, $learner, $submission]);
     $saveAnnUrl = route('qualifications.cohorts.learners.submissions.annotations', [$qualification, $cohort, $learner, $submission]);
     $initialAnnotations = $result?->annotations_json ?? [];
@@ -361,7 +363,26 @@
 
 
     {{-- ─── RIGHT COLUMN — PDF Annotation Viewer (sticky, 50 %) ──────── --}}
-    @if($isPdf && $result)
+    @if($isPdfExt && !$fileOnDisk && $result)
+    <div class="pdf-right-col hidden xl:flex flex-1 min-w-0 sticky top-4 items-start justify-center" style="height:calc(100vh - 5rem)">
+        <div class="mt-16 flex flex-col items-center gap-3 text-center px-8">
+            <svg class="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p class="text-sm font-semibold text-gray-500">PDF file not on disk</p>
+            <p class="text-xs text-gray-400 leading-relaxed">
+                The original submission file (<span class="font-mono">{{ $submission->original_filename }}</span>)
+                was not found in storage. This can happen when binary files are not preserved across environment resets.
+                @if($submission->isFromMoodle())
+                Re-sync this submission from Moodle to restore the file.
+                @else
+                Ask the learner to re-upload, or upload a replacement file via the assignment page.
+                @endif
+            </p>
+        </div>
+    </div>
+    @elseif($isPdf && $result)
     <div class="pdf-right-col hidden xl:block flex-1 min-w-0 sticky top-4 overflow-y-auto" style="height:calc(100vh - 5rem)">
             {{-- Panel card fills the column height; sign-off scrolls below it --}}
             <div class="flex flex-col rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden" id="viewer-panel" style="height:calc(100vh - 5rem); flex-shrink:0">
