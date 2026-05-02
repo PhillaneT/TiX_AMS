@@ -18,6 +18,8 @@ class MarkingResult extends Model
         'assessor_override',
         'final_verdict',
         'assessor_name',
+        'etqa_registration',
+        'assessment_provider',
         'annotated_pdf_path',
         'cover_pdf_path',
         'pdf_hash',

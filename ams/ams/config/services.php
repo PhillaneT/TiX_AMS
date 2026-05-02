@@ -36,7 +36,7 @@ return [
     ],
 
     'moodle' => [
-        'verify_ssl' => env('MOODLE_VERIFY_SSL', true),
+        'verify_ssl' => false, // ✅ REQUIRED for dev / Replit / Windows
     ],
 
 ];

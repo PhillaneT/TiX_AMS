@@ -22,24 +22,30 @@ class LmsSyncController extends Controller
     {
         abort_if($integration->user_id !== auth()->id(), 403);
 
-        $courseIds = $integration->course_ids ?? [];
-
-        if (empty($courseIds)) {
-            return redirect()
-                ->route('integrations.index')
-                ->with('error', 'No course IDs configured on this connection. Edit the connection and add course IDs first.');
-        }
-
-        $request->validate([
+        // ✅ Single, authoritative validation
+        $validated = $request->validate([
             'qualification_id' => ['required', 'integer', 'exists:qualifications,id'],
+            'course_ids'       => ['required', 'array', 'min:1'],
+            'course_ids.*'     => ['integer'],
         ]);
 
-        $qualificationId = $request->integer('qualification_id');
+        $qualificationId = $validated['qualification_id'];
+        $courseIds       = $validated['course_ids'];
+
+        // ✅ HARD SCOPE LOCK (defensive programming)
+        if (empty($courseIds)) {
+            return redirect()
+                ->back()
+                ->with('error', 'Please select at least one Moodle course to sync.');
+        }
+
+        // ✅ Create service AFTER validation
+        $service = new MoodleService($integration);
 
         try {
-            $service      = new MoodleService($integration);
-            $syncResult   = $service->getAssignments($courseIds);
-        } catch (\Exception $e) {
+            // ✅ ONLY sync assignments from selected courses
+            $syncResult = $service->getAssignments($courseIds);
+        } catch (\Throwable $e) {
             $integration->update(['last_error' => $e->getMessage()]);
 
             return redirect()
@@ -47,7 +53,8 @@ class LmsSyncController extends Controller
                 ->with('error', 'Sync failed: ' . $e->getMessage());
         }
 
-        $moodleAssignments = $syncResult['assignments'];
+        // ✅ Continue with existing assignment + submission import logic
+        $moodleAssignments = $syncResult['assignments'] ?? [];
         $moodleWarnings    = $syncResult['warnings'] ?? [];
 
         $assignmentsImported  = 0;
@@ -266,20 +273,18 @@ class LmsSyncController extends Controller
             $service = new MoodleService($integration);
             $courses = $service->getCourses();
         } catch (\Exception $e) {
-            $integration->update(['last_error' => $e->getMessage()]);
-
             return redirect()
                 ->route('integrations.index')
                 ->with('error', 'Could not fetch courses: ' . $e->getMessage());
         }
 
-        $summary = collect($courses)
-            ->map(fn($c) => 'ID ' . $c['id'] . ': ' . ($c['fullname'] ?? $c['shortname'] ?? '?'))
-            ->implode("\n");
+        $integration->update([
+            'last_fetched_courses' => $courses,
+        ]);
 
         return redirect()
             ->route('integrations.index')
-            ->with('success', "Found " . count($courses) . " accessible course(s):\n" . $summary);
+            ->with('success', 'Fetched ' . count($courses) . ' Moodle course(s).');
     }
 
     // -------------------------------------------------------
@@ -307,6 +312,13 @@ class LmsSyncController extends Controller
         Cohort $cohort,
         int $moodleAssignId
     ): int {
+    // 🔒 Defensive guard: never import submissions into the wrong assignment
+    if ((int) $assignment->lms_assignment_id !== (int) $moodleAssignId) {
+        throw new \LogicException(
+            "Assignment mismatch: refusing to import submissions into the wrong assignment."
+        );
+    }
+
         $submissions = $service->getSubmissions($moodleAssignId);
         $imported    = 0;
 

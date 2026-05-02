@@ -9,9 +9,8 @@ use App\Models\Learner;
 use App\Models\MarkingResult;
 use App\Models\Qualification;
 use App\Models\Submission;
-use App\Services\Pdf\AnnotationSuggester;
 use App\Services\Pdf\Annotator;
-use App\Services\Pdf\TextExtractor;
+use App\Services\Pdf\AssessorDeclarationGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -95,19 +94,13 @@ class SubmissionController extends Controller
             default          => 'LOW',
         };
 
-        // Suggest stamp positions — try to match criteria to PDF pages
-        $annotations = $this->suggestAnnotations(
-            $marking['questions'],
-            Storage::path($submission->file_path)
-        );
-
         $result = MarkingResult::create([
             'submission_id'    => $submission->id,
             'user_id'          => auth()->id(),
             'ai_recommendation'=> $marking['verdict'],
             'confidence'       => $confidence,
             'questions_json'   => $marking['questions'],
-            'annotations_json' => $annotations,
+            'annotations_json' => [],
             'mock_mode'        => $mockMode,
             'assessor_override'=> false,
             'final_verdict'    => $marking['verdict'],
@@ -162,27 +155,76 @@ class SubmissionController extends Controller
         abort_if($submission->status !== 'review_required', 422);
 
         $request->validate([
-            'final_verdict'    => ['required', 'in:COMPETENT,NOT_YET_COMPETENT'],
-            'moderation_notes' => ['nullable', 'string', 'max:2000'],
+            'final_verdict'      => ['required', 'in:COMPETENT,NOT_YET_COMPETENT'],
+            'moderation_notes'   => ['nullable', 'string', 'max:2000'],
+            'etqa_registration'  => ['nullable', 'string', 'max:100'],
+            'assessment_provider'=> ['nullable', 'string', 'max:200'],
         ]);
 
         $override = $request->input('final_verdict') !== $submission->markingResult?->ai_recommendation;
 
-        $submission->markingResult?->update([
-            'final_verdict'    => $request->input('final_verdict'),
-            'assessor_override'=> $override,
-            'assessor_name'    => auth()->user()->name,
-            'moderation_notes' => $request->input('moderation_notes'),
-            'signed_off_at'    => now(),
-        ]);
+        // ── Persist stamps + mark edits sent from the sign-off form ──────────
+        // The view injects the current in-memory state into hidden fields so we
+        // always have the very latest data regardless of whether "Save" was clicked.
+        $result = $submission->markingResult;
+        if ($result) {
+            $resultUpdates = [
+                'final_verdict'      => $request->input('final_verdict'),
+                'assessor_override'  => $override,
+                'assessor_name'      => auth()->user()->name,
+                'etqa_registration'  => $request->input('etqa_registration'),
+                'assessment_provider'=> $request->input('assessment_provider'),
+                'moderation_notes'   => $request->input('moderation_notes'),
+                'signed_off_at'      => now(),
+            ];
+
+            // Merge in annotations (stamps) from hidden field
+            if ($request->filled('annotations_json')) {
+                $stamps = json_decode($request->input('annotations_json'), true);
+                if (is_array($stamps)) {
+                    $resultUpdates['annotations_json'] = array_map(fn($s) => [
+                        'page'            => (int)   ($s['page']   ?? 1),
+                        'x_pct'           => round((float) ($s['x_pct'] ?? 0), 4),
+                        'y_pct'           => round((float) ($s['y_pct'] ?? 0), 4),
+                        'type'            => in_array($s['type'] ?? '', ['tick','cross']) ? $s['type'] : 'tick',
+                        'criterion_index' => isset($s['criterion_index']) ? (int) $s['criterion_index'] : null,
+                        'criterion'       => mb_substr((string) ($s['criterion'] ?? ''), 0, 100),
+                    ], $stamps);
+                }
+            }
+
+            // Merge in per-criterion mark/comment edits from hidden field
+            if ($request->filled('questions_json')) {
+                $edits    = json_decode($request->input('questions_json'), true);
+                $existing = $result->questions_json ?? [];
+                if (is_array($edits) && is_array($existing)) {
+                    foreach ($edits as $idx => $q) {
+                        if (!isset($existing[$idx])) continue;
+                        if (isset($q['awarded'])) {
+                            $existing[$idx]['awarded'] = max(0, min(
+                                (int) ($existing[$idx]['max_marks'] ?? 0),
+                                (int) $q['awarded']
+                            ));
+                        }
+                        if (array_key_exists('comment', $q)) {
+                            $existing[$idx]['comment'] = mb_substr((string) $q['comment'], 0, 500);
+                        }
+                    }
+                    $resultUpdates['questions_json'] = $existing;
+                }
+            }
+
+            $result->update($resultUpdates);
+        }
 
         $submission->update([
             'status'        => 'signed_off',
             'signed_off_at' => now(),
         ]);
 
-        // Bake final annotations into a locked PDF
+        // Bake final annotations into a locked PDF, then prepend Declaration + Marking Report
         $this->bakeAnnotatedPdf($submission);
+        $this->bakeAssessorDeclaration($submission);
 
         AuditLog::record('submission.signed_off', $submission, [
             'verdict'  => $request->input('final_verdict'),
@@ -388,6 +430,34 @@ class SubmissionController extends Controller
         $stripPrefix = fn(string $line): string =>
             preg_replace('/^\s*(?:Q\s*)?\d+\s*[\.\)\:]\s*/i', '', $line);
 
+        // Detects lines that are pure section headings with no real question content.
+        // Examples to skip: "KM-01-KT01:", "Section 1:", "Part A — Knowledge"
+        // Examples to keep: "KM-01-KT01: What is data science?" (has substantive text after the code)
+        $isHeadingOnly = function (string $clean): bool {
+            // Pure criterion code with nothing after it: KM-01-KT01 or KM-01-KT01:
+            if (preg_match('/^[A-Z]{2,5}-\d{2,3}-[A-Z]{2,5}\d*(?:[.\d]*)?:?\s*$/i', $clean)) {
+                return true;
+            }
+            // Short line ending with colon and no question mark — almost certainly a heading
+            if (mb_strlen($clean) <= 60 && str_ends_with(rtrim($clean), ':') && ! str_contains($clean, '?')) {
+                // Only skip if nothing substantive follows the last colon
+                $afterColon = trim((string) substr($clean, (int) strrpos($clean, ':') + 1));
+                if (mb_strlen($afterColon) < 8) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Extract a leading criterion-code prefix (e.g. "KM-01-KT01:") and return
+        // [label|null, question_text]. Keeps display text clean.
+        $extractLabel = function (string $clean): array {
+            if (preg_match('/^([A-Z]{2,5}-\d{2,3}-[A-Z]{2,5}\d*(?:[.\d]*)?)\s*:\s*(.+)/su', $clean, $m)) {
+                return ['[' . $m[1] . '] ' . trim($m[2])];
+            }
+            return [$clean];
+        };
+
         $criteria    = [];
         $parsedMarks = [];
         $marksSum    = 0;
@@ -405,7 +475,11 @@ class SubmissionController extends Controller
             }
 
             $clean = trim($stripPrefix($clean));
-            if ($clean === '') continue;
+            if ($clean === '' || $isHeadingOnly($clean)) continue;
+
+            // Normalise: wrap criterion-code prefix in [brackets] so the view can
+            // render it as a small badge separate from the actual question text.
+            [$clean] = $extractLabel($clean);
 
             $criteria[]    = ['text' => $clean, 'raw_marks' => $marks];
             $parsedMarks[] = $marks;
@@ -611,17 +685,48 @@ class SubmissionController extends Controller
         Learner $learner, Submission $submission
     ) {
         abort_if($submission->learner_id !== $learner->id, 404);
-        abort_unless(Storage::exists($submission->file_path), 404);
 
-        $mime = Storage::mimeType($submission->file_path) ?: 'application/pdf';
+        $absolutePath = Storage::path($submission->file_path);
 
-        return response()->stream(function () use ($submission) {
-            $stream = Storage::readStream($submission->file_path);
-            fpassthru($stream);
-            fclose($stream);
-        }, 200, [
-            'Content-Type'        => $mime,
-            'Content-Disposition' => 'inline; filename="' . addslashes($submission->original_filename) . '"',
+        abort_unless(file_exists($absolutePath), 404, 'Submission file not found on disk.');
+
+        return response()->file($absolutePath, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . rawurlencode($submission->original_filename) . '"',
+            'Cache-Control'       => 'private, no-store',
+        ]);
+    }
+
+    // -------------------------------------------------------
+    // Serve the final annotated PDF (stamps baked in, no cover page)
+    // -------------------------------------------------------
+    public function serveAnnotated(
+        Qualification $qualification, Cohort $cohort,
+        Learner $learner, Submission $submission
+    ) {
+        abort_if($submission->learner_id !== $learner->id, 404);
+        $path = Storage::path($submission->markingResult?->annotated_pdf_path ?? '');
+        abort_unless($submission->markingResult?->annotated_pdf_path && file_exists($path), 404, 'Annotated PDF not yet generated.');
+        return response()->file($path, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="annotated_' . rawurlencode($submission->original_filename) . '"',
+            'Cache-Control'       => 'private, no-store',
+        ]);
+    }
+
+    // -------------------------------------------------------
+    // Serve the combined Declaration + annotated PDF (return-to-learner copy)
+    // -------------------------------------------------------
+    public function serveDeclaration(
+        Qualification $qualification, Cohort $cohort,
+        Learner $learner, Submission $submission
+    ) {
+        abort_if($submission->learner_id !== $learner->id, 404);
+        $path = Storage::path($submission->markingResult?->cover_pdf_path ?? '');
+        abort_unless($submission->markingResult?->cover_pdf_path && file_exists($path), 404, 'Declaration PDF not yet generated.');
+        return response()->file($path, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="declaration_' . rawurlencode($submission->original_filename) . '"',
             'Cache-Control'       => 'private, no-store',
         ]);
     }
@@ -638,7 +743,7 @@ class SubmissionController extends Controller
         abort_if($submission->learner_id !== $learner->id, 404);
 
         $data = $request->validate([
-            'annotations'          => ['required', 'array'],
+            'annotations'          => ['present', 'array'],   // 'present' allows empty []
             'annotations.*.page'   => ['required', 'integer', 'min:1'],
             'annotations.*.x_pct'  => ['required', 'numeric', 'min:0', 'max:1'],
             'annotations.*.y_pct'  => ['required', 'numeric', 'min:0', 'max:1'],
@@ -691,28 +796,13 @@ class SubmissionController extends Controller
     // PRIVATE HELPERS
     // -------------------------------------------------------
 
-    private function suggestAnnotations(array $questions, string $filePath): array
-    {
-        try {
-            $pageTexts  = (new TextExtractor())->extractPerPage($filePath);
-            $totalPages = max(1, count($pageTexts));
-            return (new AnnotationSuggester())->suggest($questions, $pageTexts, $totalPages);
-        } catch (\Throwable $e) {
-            Log::warning('AnnotationSuggester failed: ' . $e->getMessage());
-            return [];
-        }
-    }
-
     private function bakeAnnotatedPdf(Submission $submission): void
     {
         $result = $submission->markingResult;
         if (!$result) return;
 
-        $stamps = $result->annotations_json ?? [];
-        if (empty($stamps)) return;
-
         $ext = strtolower(pathinfo($submission->original_filename, PATHINFO_EXTENSION));
-        if ($ext !== 'pdf') return; // only PDF submissions can be annotated server-side
+        if ($ext !== 'pdf') return;
 
         try {
             $sourcePath = Storage::path($submission->file_path);
@@ -724,6 +814,10 @@ class SubmissionController extends Controller
                 mkdir(dirname($outAbs), 0755, true);
             }
 
+            $stamps = $result->annotations_json ?? [];
+
+            // Always produce the annotated file — even with no stamps — so
+            // bakeAssessorDeclaration always has a concrete PDF to prepend to.
             (new Annotator())->annotate($sourcePath, $stamps, $outAbs);
 
             $result->update([
@@ -731,7 +825,69 @@ class SubmissionController extends Controller
                 'pdf_hash'           => hash_file('sha256', $outAbs),
             ]);
         } catch (\Throwable $e) {
-            Log::warning('PDF annotation bake failed: ' . $e->getMessage());
+            Log::error('bakeAnnotatedPdf failed: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            session()->flash('pdf_bake_error', 'Annotated PDF: ' . $e->getMessage());
+        }
+    }
+
+    private function bakeAssessorDeclaration(Submission $submission): void
+    {
+        $result = $submission->markingResult;
+        if (!$result) return;
+
+        $ext = strtolower(pathinfo($submission->original_filename, PATHINFO_EXTENSION));
+        if ($ext !== 'pdf') return;
+
+        try {
+            $learner       = $submission->learner;
+            $qualification = $submission->assignment->qualification;
+            $generator     = new AssessorDeclarationGenerator();
+
+            // ── 1. Assessor Declaration cover page ──────────────────────────
+            $declData = [
+                'qualification_name' => $qualification->name,
+                'assignment_name'    => $submission->assignment->name,
+                'saqa_id'            => $qualification->saqa_id,
+                'seta'               => $qualification->seta,
+                'learner_name'       => $learner->full_name,
+                'student_no'         => $learner->external_ref ?: $learner->email,
+                'assessor_name'      => $result->assessor_name,
+                'etqa_registration'  => $result->etqa_registration,
+                'assessment_provider'=> $result->assessment_provider ?: config('app.name'),
+                'verdict'            => $result->final_verdict,
+                'date'               => $result->signed_off_at,
+            ];
+            // ── 2. Marking Report data ───────────────────────────────────────
+            $reportData = [
+                'assignment_name' => $submission->assignment->name,
+                'learner_name'    => $learner->full_name,
+                'student_no'      => $learner->external_ref ?: $learner->email,
+                'assessor_name'   => $result->assessor_name,
+                'date'            => $result->signed_off_at,
+                'questions'       => $result->questions_json ?? [],
+                'verdict'         => $result->final_verdict,
+            ];
+
+            // ── 3. Build final PDF — front pages drawn natively, submission via FPDI ──
+            $outDir  = "private/annotated/{$submission->learner_id}/{$submission->id}";
+            $outFile = $outDir . '/cover_' . $submission->original_filename;
+            $outAbs  = Storage::path($outFile);
+
+            $generator->buildFinalPdfWithStamps(
+                $declData,
+                $reportData,
+                Storage::path($submission->file_path),
+                $result->annotations_json ?? [],
+                $outAbs
+            );
+
+            $result->update(['cover_pdf_path' => $outFile]);
+        } catch (\Throwable $e) {
+            Log::error('bakeAssessorDeclaration failed: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine() . "\n" . $e->getTraceAsString());
+            session()->flash('pdf_bake_error',
+                'Declaration PDF: ' . $e->getMessage()
+                . ' — ' . basename($e->getFile()) . ':' . $e->getLine()
+            );
         }
     }
 }

@@ -7,6 +7,7 @@ use App\Models\LmsConnection;
 use App\Services\MoodleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
+use GuzzleHttp\Client;
 
 class LmsConnectionController extends Controller
 {
@@ -120,30 +121,41 @@ class LmsConnectionController extends Controller
             ->with('success', 'Connection removed.');
     }
 
-    public function test(LmsConnection $integration)
+    public function test(Request $request, LmsConnection $integration)
     {
-        abort_if($integration->user_id !== auth()->id(), 403);
-
         try {
-            $service = new MoodleService($integration);
-            $result  = $service->testConnection();
-        } catch (\Exception $e) {
-            $result = ['ok' => false, 'error' => $e->getMessage()];
+            $client = new \GuzzleHttp\Client([
+                'timeout' => 10,
+                'verify' => false, // required on Replit
+            ]);
+
+            // ✅ Correct way — use model API
+            $token = trim($integration->getApiToken());
+
+            $response = $client->post(
+                rtrim($integration->base_url, '/') . '/webservice/rest/server.php',
+                [
+                    'form_params' => [
+                        'wstoken' => $token,
+                        'wsfunction' => 'core_webservice_get_site_info',
+                        'moodlewsrestformat' => 'json',
+                    ],
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'source' => 'laravel_app',
+                'moodle_response' => json_decode($response->getBody()->getContents(), true),
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'source' => 'laravel_app',
+                'error' => $e->getMessage(),
+            ], 500);
         }
-
-        if ($result['ok']) {
-            $integration->update(['last_error' => null]);
-
-            return redirect()
-                ->route('integrations.index')
-                ->with('success', 'Connection test successful! Site: ' . ($result['data']['sitename'] ?? 'Unknown'));
-        }
-
-        $integration->update(['last_error' => $result['error']]);
-
-        return redirect()
-            ->route('integrations.index')
-            ->with('error', 'Connection test failed: ' . $result['error']);
     }
 
     // -------------------------------------------------------

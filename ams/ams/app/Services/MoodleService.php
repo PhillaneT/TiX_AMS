@@ -44,15 +44,25 @@ class MoodleService
      */
     public function getCourses(): array
     {
+        $userId = $this->getUserId();
+
         $result = $this->call('core_enrol_get_users_courses', [
-            'userid' => $this->getUserId(),
+            'userid' => $userId,
         ]);
 
         if (! $result['ok']) {
-            throw new \RuntimeException($result['error']);
+            throw new \RuntimeException(
+                'Moodle course fetch failed: ' . $result['error']
+            );
         }
 
-        return $result['data'] ?? [];
+        if (! is_array($result['data'])) {
+            throw new \RuntimeException(
+                'Unexpected Moodle response when fetching courses.'
+            );
+        }
+
+        return $result['data'];
     }
 
     /**
@@ -87,25 +97,34 @@ class MoodleService
 
     /**
      * Fetch submissions for a specific assignment.
-     */
-    public function getSubmissions(int $assignmentId): array
-    {
-        $result = $this->call('mod_assign_get_submissions', [
-            'assignmentids[0]' => $assignmentId,
-        ]);
+     */    
+        public function getSubmissions(int $assignmentId): array
+        {
+            $token = $this->integration->getApiToken();
 
-        if (! $result['ok']) {
-            throw new \RuntimeException($result['error']);
-        }
+            $response = $this->client->post(
+                rtrim($this->integration->base_url, '/') . '/webservice/rest/server.php',
+                [
+                    'form_params' => [
+                        'wstoken' => $token,
+                        'wsfunction' => 'mod_assign_get_submissions',
+                        'moodlewsrestformat' => 'json',
+                        'assignmentids[0]' => $assignmentId,
+                    ],
+                ]
+            );
 
-        foreach ($result['data']['assignments'] ?? [] as $a) {
-            if ((int) $a['assignmentid'] === $assignmentId) {
-                return $a['submissions'] ?? [];
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            if (
+                empty($data['assignments'][0]['submissions']) ||
+                ! is_array($data['assignments'][0]['submissions'])
+            ) {
+                return [];
             }
-        }
 
-        return [];
-    }
+            return $data['assignments'][0]['submissions'];
+        }
 
     /**
      * Download a submitted file and return its contents.
@@ -237,10 +256,15 @@ class MoodleService
             'moodlewsrestformat' => 'json',
         ], $params);
 
+
         $raw = $this->curlPost($url, $body);
 
-        if ($raw === false) {
-            return ['ok' => false, 'error' => 'Could not reach Moodle server.', 'data' => null];
+        if (is_array($raw) && isset($raw['error'])) {
+            return [
+                'ok'    => false,
+                'error' => $raw['error'],
+                'data'  => null,
+            ];
         }
 
         $data = json_decode($raw, true);
@@ -269,23 +293,32 @@ class MoodleService
         return ['ok' => true, 'error' => null, 'data' => $data, 'warnings' => $warnings];
     }
 
-    private function curlPost(string $url, array $fields): string|false
-    {
-        $verifySsl = (bool) config('services.moodle.verify_ssl', true);
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => $this->timeout,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query($fields),
-            CURLOPT_SSL_VERIFYPEER => $verifySsl,
-            CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
-            CURLOPT_USERAGENT      => 'AjanaNova-AMS/1.0',
-        ]);
-        $result = curl_exec($ch);
-        curl_close($ch);
-        return $result;
-    }
+        private function curlPost(string $url, array $fields): string|array
+        {
+            $verifySsl = (bool) config('services.moodle.verify_ssl', true);
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => $this->timeout,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => http_build_query($fields),
+                CURLOPT_SSL_VERIFYPEER => $verifySsl,
+                CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
+                CURLOPT_USERAGENT      => 'AjanaNova-AMS/1.0',
+            ]);
+
+            $result = curl_exec($ch);
+
+            if ($result === false) {
+                $error = curl_error($ch);
+                curl_close($ch);
+                return ['error' => $error];
+            }
+
+            curl_close($ch);
+            return $result;
+        }
 
     private function curlGet(string $url): string|false
     {

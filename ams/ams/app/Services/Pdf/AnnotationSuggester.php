@@ -4,70 +4,93 @@ namespace App\Services\Pdf;
 
 class AnnotationSuggester
 {
-    // Words too common to use for page matching
     private const STOP_WORDS = [
         'that', 'this', 'with', 'from', 'they', 'have', 'will', 'your',
         'what', 'which', 'when', 'there', 'their', 'about', 'would',
         'could', 'should', 'does', 'each', 'also', 'must', 'been',
     ];
 
+    // Max stamps shown per criterion row
+    private const MAX_STAMPS = 8;
+
+    // Horizontal gap between stamps (fraction of page width)
+    private const X_STEP = 0.038;
+
+    // Left margin for first stamp
+    private const X_START = 0.03;
+
+    // Minimum vertical gap between two criterion rows on the same page
+    private const MIN_Y_GAP = 0.055;
+
     /**
-     * Given marked criteria and per-page text, produce a stamp list for the PDF viewer.
+     * Build the full stamp list for all criteria.
      *
-     * Each stamp: {page, x_pct, y_pct, type, criterion_index, criterion}
-     * x_pct / y_pct are fractions of the page dimensions (top-left origin, 0→1).
+     * Each criterion produces a horizontal row of stamps — one per mark:
+     *   awarded=1 / max=3  →  [✓][✗][✗]
+     *   awarded=3 / max=3  →  [✓][✓][✓]
+     *   awarded=4 / max=11 →  scaled to 8: [✓][✓][✓][✗][✗][✗][✗][✗]
      *
-     * @param  array $questions    Items from questions_json (criterion, awarded, max_marks)
-     * @param  array $pageTexts    [pageNum => string] from TextExtractor
-     * @param  int   $totalPages   Total pages in the PDF (used for fallback distribution)
+     * Rows are pushed down so they never overlap each other on the same page.
      */
     public function suggest(array $questions, array $pageTexts, int $totalPages = 1): array
     {
-        $stamps = [];
-
-        // Track how many stamps already occupy each page so we can stagger y positions
-        $pageStampCount = [];
+        $stamps      = [];
+        $usedY       = []; // [page => [y, y, …]] — occupied y positions per page
+        $slotPerPage = []; // fallback slot counter per page
 
         foreach ($questions as $idx => $q) {
-            $type = ($q['awarded'] >= ($q['max_marks'] * 0.5)) ? 'tick' : 'cross';
+            $awarded   = max(0, (int) ($q['awarded']   ?? 0));
+            $maxMarks  = max(1, (int) ($q['max_marks'] ?? 1));
+            $criterion = trim($q['criterion'] ?? '');
 
-            $criterion = $q['criterion'] ?? '';
-            $page      = $this->matchPage($criterion, $pageTexts, $totalPages, $idx);
+            $page = $this->matchPage($criterion, $pageTexts, $totalPages, $idx);
 
-            $pageStampCount[$page] = ($pageStampCount[$page] ?? 0) + 1;
-            $slotOnPage = $pageStampCount[$page] - 1;
+            $slot         = $slotPerPage[$page] ?? 0;
+            $slotPerPage[$page] = $slot + 1;
 
-            // Place stamps in the left margin; stagger vertically.
-            // First stamp at 8% from top, each subsequent +7%, wrapping after 12 slots.
-            $yPct = 0.08 + (($slotOnPage % 12) * 0.07);
+            // Raw y estimate from text (or slot fallback)
+            $rawY = $this->estimateY($criterion, $pageTexts[$page] ?? '', $slot);
 
-            $stamps[] = [
-                'page'            => $page,
-                'x_pct'           => 0.03,
-                'y_pct'           => round($yPct, 4),
-                'type'            => $type,
-                'criterion_index' => $idx,
-                'criterion'       => mb_substr($criterion, 0, 80),
-            ];
+            // Push down if it would overlap a previously placed row on this page
+            $yPct = $this->resolveOverlap($rawY, $page, $usedY);
+            $usedY[$page][] = $yPct;
+
+            // Scale marks to MAX_STAMPS if max_marks is large
+            $stampsToShow = min($maxMarks, self::MAX_STAMPS);
+            $ticksToShow  = ($maxMarks <= self::MAX_STAMPS)
+                ? $awarded
+                : (int) round($awarded / $maxMarks * self::MAX_STAMPS);
+
+            for ($m = 0; $m < $stampsToShow; $m++) {
+                $type = ($m < $ticksToShow) ? 'tick' : 'cross';
+                $xPct = self::X_START + ($m * self::X_STEP);
+
+                $stamps[] = [
+                    'page'            => $page,
+                    'x_pct'           => round($xPct, 4),
+                    'y_pct'           => round($yPct, 4),
+                    'type'            => $type,
+                    'criterion_index' => $idx,
+                    'criterion'       => mb_substr($criterion, 0, 80),
+                ];
+            }
         }
 
         return $stamps;
     }
 
+    // ─── Private helpers ─────────────────────────────────────────────────────
+
     /**
-     * Find the best-matching page for a criterion by keyword frequency.
-     * Falls back to distributing criteria evenly across pages when no text is available.
+     * Find the best-matching page by keyword frequency.
      */
-    private function matchPage(string $criterion, array $pageTexts, int $totalPages, int $criterionIdx): int
+    private function matchPage(string $criterion, array $pageTexts, int $totalPages, int $idx): int
     {
         if (empty($pageTexts)) {
-            // No text available — distribute criteria evenly across pages
-            $pagesAvailable = max(1, $totalPages);
-            return (int) (($criterionIdx % $pagesAvailable) + 1);
+            return (int) (($idx % max(1, $totalPages)) + 1);
         }
 
         $keywords = $this->extractKeywords($criterion);
-
         if (empty($keywords)) {
             return array_key_first($pageTexts);
         }
@@ -90,6 +113,47 @@ class AnnotationSuggester
         }
 
         return $bestPage;
+    }
+
+    /**
+     * Return the vertical position (0→1, top-down) for a criterion row.
+     *
+     * Keyword-to-line matching is unreliable for styled workbooks: smalot
+     * extracts text lines but has no awareness of banner images that occupy
+     * the top 30-40% of the visual page, so a line at position 2-of-15 can
+     * map to y≈0.16 which sits inside the image area on screen.
+     *
+     * Instead we use slot-based spacing starting below the typical banner zone
+     * (y = 0.42). The assessor then uses the viewer to drag stamps to the exact
+     * answer location — this gives them a clean, predictable starting spread.
+     */
+    private function estimateY(string $criterion, string $pageText, int $slot): float
+    {
+        // Start below the typical top-banner area; space rows 5.5% apart.
+        return min(0.93, 0.42 + ($slot * self::MIN_Y_GAP));
+    }
+
+    /**
+     * Push $yPct down until it is at least MIN_Y_GAP away from every
+     * previously placed row on the same page.
+     */
+    private function resolveOverlap(float $yPct, int $page, array $usedY): float
+    {
+        $occupied = $usedY[$page] ?? [];
+
+        for ($attempt = 0; $attempt < 30; $attempt++) {
+            $conflict = false;
+            foreach ($occupied as $taken) {
+                if (abs($yPct - $taken) < self::MIN_Y_GAP) {
+                    $yPct    = $taken + self::MIN_Y_GAP;
+                    $conflict = true;
+                    break;
+                }
+            }
+            if (!$conflict) break;
+        }
+
+        return min(round($yPct, 4), 0.96);
     }
 
     private function extractKeywords(string $text): array

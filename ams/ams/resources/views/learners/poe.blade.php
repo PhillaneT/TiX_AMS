@@ -20,8 +20,11 @@
 
 {{-- Flash messages --}}
 @if(session('success'))
-<div class="mb-4 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm">
-    {{ session('success') }}
+<div class="mb-4 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm">{{ session('success') }}</div>
+@endif
+@if(session('pdf_bake_error'))
+<div class="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm font-mono">
+    <strong>PDF generation error (check server log for full trace):</strong><br>{{ session('pdf_bake_error') }}
 </div>
 @endif
 @if(session('info'))
@@ -407,9 +410,138 @@ function toggleUpload(id) {
 </script>
 
 <style>
+/* ── Screen helpers ──────────────────────────────────────────────── */
+.print-only { display: none !important; }
+
+/* ── Print styles ────────────────────────────────────────────────── */
 @media print {
-    .no-print, nav, aside, button { display: none !important; }
-    body { font-size: 11pt; }
+    /* ── 1. Hide everything we don't want printed ── */
+    .no-print,
+    button, form,
+    [class*="no-print"]    { display: none !important; }
+
+    /* The app sidebar is <aside> and the top bar is <header> */
+    aside                  { display: none !important; }
+    header                 { display: none !important; }
+
+    .print-only            { display: block !important; }
+
+    /* ── 2. Page geometry ── */
+    @page {
+        size: A4 portrait;
+        margin: 12mm 12mm 18mm 12mm;
+    }
+
+    /* ── 3. Reset body / layout ── */
+    html, body {
+        font-size: 10pt;
+        color: #000 !important;
+        background: #fff !important;
+        height: auto !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Body is flex(sidebar | content). Remove the sidebar flex child
+       and make the remaining content take full width. */
+    body {
+        display: block !important;
+    }
+
+    /* The main content wrapper has ml-64 for the sidebar — reset it */
+    body > div {
+        margin-left: 0 !important;
+        width: 100% !important;
+        display: block !important;
+    }
+
+    main {
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    /* ── 4. Cosmetics ── */
+    * {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+    .bg-white { background: #fff !important; }
+
+    /* ── 5. Summary badges / counts ── */
+    .text-2xl { font-size: 14pt !important; }
+
+    /* ── 6. Tracking table ── */
+    /* Remove overflow wrapper that clips columns on screen */
+    .overflow-x-auto { overflow: visible !important; }
+
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: fixed;
+        page-break-inside: auto;
+    }
+    thead { display: table-header-group; }
+    tr    { page-break-inside: avoid; }
+
+    th {
+        background: #1e3a5f !important;
+        color: #fff !important;
+        font-size: 8pt;
+        font-weight: bold;
+        padding: 3pt 5pt;
+        border: 0.5pt solid #1e3a5f;
+        text-align: left;
+        word-break: break-word;
+    }
+    td {
+        font-size: 8.5pt;
+        padding: 3pt 5pt;
+        border: 0.5pt solid #ccc;
+        vertical-align: top;
+        word-break: break-word;
+    }
+    tr:nth-child(even) td { background: #f9fafb !important; }
+
+    /* Explicit column widths so the Result column never gets cut off */
+    table th:nth-child(1), table td:nth-child(1) { width: 4%; }   /* # */
+    table th:nth-child(2), table td:nth-child(2) { width: 7%; }   /* Type */
+    table th:nth-child(3), table td:nth-child(3) { width: 14%; }  /* Code */
+    table th:nth-child(4), table td:nth-child(4) { width: 28%; }  /* Module */
+    table th:nth-child(5), table td:nth-child(5) { width: 5%; }   /* NQF */
+    table th:nth-child(6), table td:nth-child(6) { width: 7%; }   /* Credits */
+    table th:nth-child(7), table td:nth-child(7) { width: 25%; }  /* Assignment */
+    table th:nth-child(8), table td:nth-child(8) { width: 10%; }  /* Result */
+
+    /* ── 7. Result badge colours ── */
+    .bg-green-100 { background: #dcfce7 !important; color: #166534 !important; }
+    .bg-red-100   { background: #fee2e2 !important; color: #991b1b !important; }
+    .bg-yellow-100{ background: #fef9c3 !important; color: #854d0e !important; }
+    .bg-gray-100  { background: #f3f4f6 !important; }
+
+    /* ── 8. Assessor declaration at bottom ── */
+    .assessor-declaration-print {
+        margin-top: 10pt;
+        border: 0.5pt solid #1e3a5f;
+        padding: 8pt;
+        page-break-inside: avoid;
+    }
+
+    /* ── 9. Fixed footer every page ── */
+    .print-footer {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        font-size: 7pt;
+        color: #555;
+        text-align: center;
+        border-top: 0.5pt solid #ccc;
+        padding-top: 3pt;
+        background: #fff;
+    }
 }
 </style>
+
+{{-- Fixed print footer ─ invisible on screen, printed on every page --}}
+<div class="print-footer print-only">
+    CONFIDENTIAL — POE Tracking Document &bull; {{ $qualification->name }} &bull; Generated {{ now()->format('d M Y') }}
+</div>
 @endsection

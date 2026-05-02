@@ -1,0 +1,729 @@
+<?php
+
+namespace App\Services\Pdf;
+
+class AssessorDeclarationGenerator
+{
+    private const NAVY   = [30,  58,  95];
+    private const WHITE  = [255, 255, 255];
+    private const BLACK  = [0,   0,   0];
+    private const GRAY   = [100, 100, 100];
+    private const LIGHT  = [245, 247, 250];
+    private const BORDER = [200, 210, 220];
+    private const GREEN  = [16,  122,  56];
+    private const RED    = [185,  28,  28];
+
+    /**
+     * Generate a standalone Assessor Declaration PDF and return its absolute path.
+     *
+     * @param array $data {
+     *   qualification_name, assignment_name, saqa_id, seta,
+     *   learner_name, student_no,
+     *   assessor_name, etqa_registration, assessment_provider,
+     *   verdict ('COMPETENT'|'NOT_YET_COMPETENT'), date (Carbon|string)
+     * }
+     */
+    public function generate(array $data): string
+    {
+        if (!class_exists(\setasign\Fpdi\Tcpdf\Fpdi::class)) {
+            throw new \RuntimeException(
+                'setasign/fpdi and tecnickcom/tcpdf must be installed.'
+            );
+        }
+
+        $prevHandler = set_error_handler(null);
+        try {
+            $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
+            $pdf->setPrintHeader(false);
+            $pdf->setPrintFooter(false);
+            $pdf->SetAutoPageBreak(false);
+            $pdf->SetMargins(20, 20, 20);
+            $pdf->AddPage('P', 'A4');
+            $this->drawPage($pdf, $data);
+            $tmpPath = sys_get_temp_dir() . '/assessor_decl_' . uniqid() . '.pdf';
+            $pdf->Output($tmpPath, 'F');
+        } finally {
+            set_error_handler($prevHandler);
+        }
+        return $tmpPath;
+    }
+
+    // ─── GhostScript helpers ──────────────────────────────────────────────────
+
+    /**
+     * Pre-validate a PDF for FPDI importability using a throwaway FPDI instance.
+     *
+     * Returns [importPath, pageCount] on success, or [null, 0] on failure.
+     * If the original PDF fails but a GhostScript downgrade works, returns the
+     * temp downgraded path (caller must unlink it when done).
+     */
+    private function preValidatePdf(string $path): array
+    {
+        foreach ([$path, '__gs__'] as $attempt) {
+            $testSrc = $path;
+            $isGs    = false;
+
+            if ($attempt === '__gs__') {
+                $gs = $this->tryGhostscriptDowngrade($path);
+                if (!$gs) break;
+                $testSrc = $gs;
+                $isGs    = true;
+            }
+
+            try {
+                $test = new \setasign\Fpdi\Tcpdf\Fpdi();
+                $test->setPrintHeader(false);
+                $test->setPrintFooter(false);
+                $test->SetAutoPageBreak(false);
+                $count = $test->setSourceFile($testSrc);
+                // Try all pages — if any fails the import would corrupt our real doc
+                for ($p = 1; $p <= $count; $p++) {
+                    $test->AddPage();
+                    $test->importPage($p);
+                }
+                unset($test);
+                return [$testSrc, $count];
+            } catch (\Throwable $e) {
+                if ($isGs) @unlink($testSrc);
+                // Try GhostScript on next iteration
+            }
+        }
+        return [null, 0];
+    }
+
+    /**
+     * Locate a usable GhostScript binary, or return null if none found.
+     */
+    private function findGhostscript(): ?string
+    {
+        $candidates = ['gs', 'gswin64c', 'gswin32c', 'gsc'];
+        foreach ($candidates as $bin) {
+            exec(escapeshellcmd($bin) . ' --version 2>&1', $out, $code);
+            if ($code === 0) return $bin;
+        }
+        // Common Windows install paths
+        foreach (glob('C:/Program Files/gs/gs*/bin/gswin64c.exe') ?: [] as $path) {
+            if (file_exists($path)) return '"' . $path . '"';
+        }
+        foreach (glob('C:/Program Files (x86)/gs/gs*/bin/gswin32c.exe') ?: [] as $path) {
+            if (file_exists($path)) return '"' . $path . '"';
+        }
+        return null;
+    }
+
+    /**
+     * Use GhostScript to rewrite the PDF at PDF 1.4 compatibility so that FPDI
+     * (which only supports uncompressed cross-reference tables) can import it.
+     * Returns the path of the converted temp file, or null on failure.
+     */
+    private function tryGhostscriptDowngrade(string $inputPath): ?string
+    {
+        $gs = $this->findGhostscript();
+        if (!$gs) return null;
+
+        $tmp = sys_get_temp_dir() . '/gs_compat_' . uniqid() . '.pdf';
+        $cmd = $gs
+            . ' -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pdfwrite'
+            . ' -dCompatibilityLevel=1.4'
+            . ' -sOutputFile=' . escapeshellarg($tmp)
+            . ' ' . escapeshellarg($inputPath)
+            . ' 2>&1';
+        exec($cmd, $output, $exitCode);
+
+        if ($exitCode === 0 && file_exists($tmp) && filesize($tmp) > 0) {
+            return $tmp;
+        }
+        @unlink($tmp);
+        return null;
+    }
+
+    /**
+     * Try to call setSourceFile() on $pdf for the given path.
+     * If FPDI chokes (PDF 1.5+), attempt a GhostScript downgrade and retry.
+     * Returns [resolvedPath|null, pageCount].  resolvedPath is null when both attempts fail.
+     */
+    private function openPdfSource(\setasign\Fpdi\Tcpdf\Fpdi $pdf, string $path): array
+    {
+        try {
+            $count = $pdf->setSourceFile($path);
+            return [$path, $count];
+        } catch (\Throwable $e) {
+            // Try GhostScript downgrade (PDF 1.5+ compatibility issue)
+            $gsPath = $this->tryGhostscriptDowngrade($path);
+            if ($gsPath) {
+                try {
+                    $count = $pdf->setSourceFile($gsPath);
+                    return [$gsPath, $count];   // caller must unlink $gsPath when done
+                } catch (\Throwable $e2) {
+                    @unlink($gsPath);
+                }
+            }
+            return [null, 0];   // Could not open — caller should add a notice page
+        }
+    }
+
+    /**
+     * Add a "submission could not be merged" notice page.
+     * Gives the assessor something useful even when FPDI can't read the student's PDF.
+     */
+    private function addMergeNoticePage(\setasign\Fpdi\Tcpdf\Fpdi $pdf): void
+    {
+        $pdf->AddPage('P', 'A4');
+        $pdf->SetFillColorArray(self::NAVY);
+        $pdf->SetTextColorArray(self::WHITE);
+        $pdf->SetFont('dejavusans', 'B', 13);
+        $pdf->SetXY(20, 20);
+        $pdf->Cell(170, 12, 'STUDENT SUBMISSION', 0, 1, 'C', true);
+
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->SetFont('dejavusans', '', 10);
+        $pdf->Ln(10);
+        $pdf->MultiCell(170, 6,
+            "The student's original submission PDF could not be automatically merged into this document.\n\n" .
+            "This is a PDF 1.5+ compatibility limitation of the merge library (FPDI).\n\n" .
+            "To include the submission:\n" .
+            "  1. Install GhostScript (https://ghostscript.com) and ensure it is on the system PATH, then re-sign the submission.\n" .
+            "     — OR —\n" .
+            "  2. Attach the original submission PDF alongside this document manually.\n\n" .
+            "All assessor marks and feedback are recorded on the Marking Report page above.",
+            0, 'L'
+        );
+    }
+
+    // ─── Marking report ───────────────────────────────────────────────────────
+
+    /**
+     * Generate a Marking Report PDF (criteria table with marks + assessor comments).
+     *
+     * @param array $data {
+     *   assignment_name, learner_name, student_no, assessor_name, date,
+     *   questions: array of ['criterion','max_marks','awarded','comment'],
+     *   verdict ('COMPETENT'|'NOT_YET_COMPETENT')
+     * }
+     */
+    public function generateMarkingReport(array $data): string
+    {
+        if (!class_exists(\setasign\Fpdi\Tcpdf\Fpdi::class)) {
+            throw new \RuntimeException('setasign/fpdi and tecnickcom/tcpdf must be installed.');
+        }
+
+        $prevHandler = set_error_handler(null);
+        try {
+
+        $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->SetMargins(15, 15, 15);
+        $pdf->AddPage('P', 'A4');
+
+        // ── Title banner ────────────────────────────────────────────────────
+        $pdf->SetFillColorArray(self::NAVY);
+        $pdf->SetTextColorArray(self::WHITE);
+        $pdf->SetFont('dejavusans', 'B', 14);
+        $pdf->Cell(0, 12, 'MARKING REPORT', 0, 1, 'C', true);
+        $pdf->Ln(3);
+
+        // ── Info block ──────────────────────────────────────────────────────
+        $dateStr = is_string($data['date']) ? $data['date'] : ($data['date'] ? $data['date']->format('d F Y') : date('d F Y'));
+        $infoHtml = sprintf(
+            '<table border="0.3" cellpadding="4" style="background-color:#f5f7fa; font-size:9pt;">
+                <tr><td width="38%%"><b>Assignment:</b></td><td>%s</td></tr>
+                <tr><td><b>Learner:</b></td><td>%s &nbsp;|&nbsp; Student No: %s</td></tr>
+                <tr><td><b>Assessor:</b></td><td>%s</td></tr>
+                <tr><td><b>Date Assessed:</b></td><td>%s</td></tr>
+            </table>',
+            htmlspecialchars($data['assignment_name'] ?? ''),
+            htmlspecialchars($data['learner_name']    ?? ''),
+            htmlspecialchars($data['student_no']      ?? ''),
+            htmlspecialchars($data['assessor_name']   ?? ''),
+            $dateStr
+        );
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->writeHTML($infoHtml, true, false, true, false, '');
+        $pdf->Ln(4);
+
+        // ── Criteria table ──────────────────────────────────────────────────
+        $questions = $data['questions'] ?? [];
+        $tableHtml = '<table border="0.3" cellpadding="4" cellspacing="0" style="font-size:8.5pt;">
+            <tr style="background-color:#1e3a5f; color:#ffffff; font-weight:bold; font-size:8pt;">
+                <td width="4%"  align="center">#</td>
+                <td width="37%">Criterion / Question</td>
+                <td width="7%"  align="center">Max</td>
+                <td width="7%"  align="center">Mark</td>
+                <td width="45%">Assessor Feedback / Comment</td>
+            </tr>';
+
+        foreach ($questions as $i => $q) {
+            $max     = (int) ($q['max_marks'] ?? 1);
+            $awarded = (int) ($q['awarded']   ?? 0);
+            $pct     = $max > 0 ? $awarded / $max : 0;
+            $rowBg   = $pct >= 0.5 ? '#f0fdf4' : '#fef2f2';
+            $markCol = $pct >= 0.5 ? '#166534' : '#991b1b';
+
+            // Strip [LABEL] prefix so only question text shows
+            $criterion = $q['criterion'] ?? $q['question'] ?? '—';
+            if (preg_match('/^\[([^\]]+)\]\s*(.+)/su', $criterion, $cm)) {
+                $criterion = '[' . $cm[1] . '] ' . trim($cm[2]);
+            }
+
+            $tableHtml .= sprintf(
+                '<tr style="background-color:%s;">
+                    <td align="center" style="font-weight:bold; color:%s;">%d</td>
+                    <td style="font-size:8pt;">%s</td>
+                    <td align="center">%d</td>
+                    <td align="center" style="font-weight:bold; color:%s;">%d</td>
+                    <td style="font-size:8pt; color:#374151;">%s</td>
+                </tr>',
+                $rowBg, $markCol, $i + 1,
+                htmlspecialchars($criterion),
+                $max, $markCol, $awarded,
+                htmlspecialchars($q['comment'] ?? '—')
+            );
+        }
+        $tableHtml .= '</table>';
+        $pdf->writeHTML($tableHtml, true, false, true, false, '');
+        $pdf->Ln(4);
+
+        // ── Total / Verdict ─────────────────────────────────────────────────
+        $totalMax     = array_sum(array_column($questions, 'max_marks'));
+        $totalAwarded = array_sum(array_column($questions, 'awarded'));
+        $pctTotal     = $totalMax > 0 ? round($totalAwarded / $totalMax * 100) : 0;
+        $isC          = ($data['verdict'] ?? '') === 'COMPETENT';
+
+        $summaryHtml = sprintf(
+            '<table border="0.5" cellpadding="6" style="font-size:11pt;">
+                <tr style="background-color:%s;">
+                    <td width="55%%"><b>Total Score:</b> %d / %d &nbsp;(%d%%)</td>
+                    <td width="45%%" align="center" style="font-weight:bold; color:%s; font-size:13pt;">%s</td>
+                </tr>
+            </table>',
+            $isC ? '#f0fdf4' : '#fef2f2',
+            $totalAwarded, $totalMax, $pctTotal,
+            $isC ? '#166534' : '#991b1b',
+            $isC ? '✓ COMPETENT' : '✗ NOT YET COMPETENT'
+        );
+        $pdf->writeHTML($summaryHtml, true, false, true, false, '');
+
+        // ── Footer note ─────────────────────────────────────────────────────
+        $pdf->Ln(6);
+        $pdf->SetFont('dejavusans', 'I', 7);
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->Cell(0, 5, 'CONFIDENTIAL — For assessment and moderation purposes only.', 0, 1, 'C');
+
+        $tmpPath = sys_get_temp_dir() . '/report_' . uniqid() . '.pdf';
+        $pdf->Output($tmpPath, 'F');
+
+        } finally {
+            set_error_handler($prevHandler);
+        }
+        return $tmpPath;
+    }
+
+    /**
+     * Build the final return-to-learner PDF in a single FPDI session.
+     *
+     * Draws stamps directly onto each submission page in the same session —
+     * avoiding the double-import problem where stamps placed via useTemplate()
+     * live in a separate content-stream layer that FPDI loses on re-import.
+     *
+     * Structure of the output:
+     *   [front pages: declaration, marking report, …]
+     *   [submission page 1 + stamps]
+     *   [submission page 2 + stamps]  …
+     *
+     * @param string[] $prependPaths   Ordered PDFs to prepend (declaration, report …)
+     * @param string   $submissionPath Original (unencrypted) submission PDF
+     * @param array    $stamps         annotations_json rows: {page, x_pct, y_pct, type}
+     * @param string   $outputPath     Where to write the locked output
+     */
+    /**
+     * Build the complete return-to-learner PDF in a single session.
+     *
+     * Front pages (declaration + marking report) are drawn NATIVELY in TCPDF —
+     * no FPDI import needed for them, so PDF-version incompatibility cannot occur.
+     * Only the student's submission pages use FPDI import (with GhostScript
+     * fallback for PDF 1.5+ files).
+     *
+     * @param array  $declData       Passed straight to drawPage()
+     * @param array  $reportData     Passed straight to drawMarkingReportContent()
+     * @param string $submissionPath Absolute path to the original submission PDF
+     * @param array  $stamps         annotations_json rows
+     * @param string $outputPath     Where to write the final locked PDF
+     */
+    public function buildFinalPdfWithStamps(
+        array  $declData,
+        array  $reportData,
+        string $submissionPath,
+        array  $stamps,
+        string $outputPath
+    ): void {
+        if (!class_exists(\setasign\Fpdi\Tcpdf\Fpdi::class)) {
+            throw new \RuntimeException('setasign/fpdi and tecnickcom/tcpdf must be installed.');
+        }
+
+        // TCPDF was written for PHP 7 semantics where accessing an undefined array
+        // key returns null silently.  PHP 8 emits a warning, and Laravel converts
+        // warnings to ErrorException — breaking TCPDF's internal Output() logic.
+        // We suspend Laravel's error handler for the entire PDF build so TCPDF
+        // runs with PHP's default (non-throwing) error behaviour.
+        $prevHandler = set_error_handler(null);
+
+        try {
+
+        $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetMargins(20, 20, 20);
+
+        // ── Page 1: Assessor Declaration (drawn natively) ────────────────────
+        $pdf->SetAutoPageBreak(false);
+        $pdf->AddPage('P', 'A4');
+        $this->drawPage($pdf, $declData);
+
+        // ── Page 2+: Marking Report (drawn natively) ──────────────────────────
+        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->AddPage('P', 'A4');
+        $this->drawMarkingReportContent($pdf, $reportData);
+
+        // ── Submission pages: FPDI import + stamps ────────────────────────────
+        $pdf->SetAutoPageBreak(false);
+        $gsTemp = null;
+
+        if ($submissionPath && file_exists($submissionPath)) {
+            // Pre-validate in a THROWAWAY FPDI instance.
+            // If the real import would leave a broken xobject stub, TCPDF's Output()
+            // will crash with "Undefined array key 'Length'".  By validating first,
+            // we only call importPage() in the real document when we KNOW it succeeds,
+            // so the main document's internal state is never corrupted.
+            [$importSrc, $pageCount] = $this->preValidatePdf($submissionPath);
+            if ($importSrc && $importSrc !== $submissionPath) $gsTemp = $importSrc;
+
+            if ($importSrc) {
+                $pdf->setSourceFile($importSrc);
+                for ($pageNum = 1; $pageNum <= $pageCount; $pageNum++) {
+                    $tplId = $pdf->importPage($pageNum);
+                    $sz    = $pdf->getTemplateSize($tplId);
+                    $pdf->AddPage(($sz['width'] > $sz['height']) ? 'L' : 'P',
+                                  [$sz['width'], $sz['height']]);
+                    $pdf->useTemplate($tplId, 0, 0, $sz['width'], $sz['height']);
+
+                    foreach ($stamps as $stamp) {
+                        if ((int)($stamp['page'] ?? 0) !== $pageNum) continue;
+                        $this->drawStampOnPage(
+                            $pdf,
+                            (float)$stamp['x_pct'] * $sz['width'],
+                            (float)$stamp['y_pct'] * $sz['height'],
+                            $stamp['type'] ?? 'tick'
+                        );
+                    }
+                }
+            } else {
+                // PDF cannot be imported (PDF 1.5+ without GhostScript).
+                // The front pages are intact; add a notice for the submission.
+                $this->addMergeNoticePage($pdf);
+            }
+        }
+
+        $dir = dirname($outputPath);
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $pdf->Output($outputPath, 'F');
+
+        } finally {
+            set_error_handler($prevHandler);
+            if ($gsTemp) @unlink($gsTemp);
+        }
+    }
+
+    /**
+     * Draw marking report content onto an existing PDF instance.
+     * Extracted so buildFinalPdfWithStamps can draw it natively without an FPDI re-import.
+     */
+    private function drawMarkingReportContent(\setasign\Fpdi\Tcpdf\Fpdi $pdf, array $d): void
+    {
+        // Title banner
+        $pdf->SetFillColorArray(self::NAVY);
+        $pdf->SetTextColorArray(self::WHITE);
+        $pdf->SetFont('dejavusans', 'B', 14);
+        $pdf->SetXY(20, 20);
+        $pdf->Cell(170, 12, 'MARKING REPORT', 0, 1, 'C', true);
+        $pdf->Ln(3);
+
+        // Info block
+        $dateStr  = is_string($d['date'] ?? '') ? $d['date'] : ($d['date'] ? $d['date']->format('d F Y') : date('d F Y'));
+        $infoHtml = sprintf(
+            '<table border="0.3" cellpadding="4" style="background-color:#f5f7fa; font-size:9pt;">
+                <tr><td width="38%%"><b>Assignment:</b></td><td>%s</td></tr>
+                <tr><td><b>Learner:</b></td><td>%s &nbsp;|&nbsp; Student No: %s</td></tr>
+                <tr><td><b>Assessor:</b></td><td>%s</td></tr>
+                <tr><td><b>Date Assessed:</b></td><td>%s</td></tr>
+            </table>',
+            htmlspecialchars($d['assignment_name'] ?? ''),
+            htmlspecialchars($d['learner_name']    ?? ''),
+            htmlspecialchars($d['student_no']      ?? ''),
+            htmlspecialchars($d['assessor_name']   ?? ''),
+            $dateStr
+        );
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->writeHTML($infoHtml, true, false, true, false, '');
+        $pdf->Ln(4);
+
+        // Criteria table
+        $questions = $d['questions'] ?? [];
+        $tableHtml = '<table border="0.3" cellpadding="4" cellspacing="0" style="font-size:8.5pt;">
+            <tr style="background-color:#1e3a5f; color:#ffffff; font-weight:bold; font-size:8pt;">
+                <td width="4%"  align="center">#</td>
+                <td width="37%">Criterion / Question</td>
+                <td width="7%"  align="center">Max</td>
+                <td width="7%"  align="center">Mark</td>
+                <td width="45%">Assessor Feedback / Comment</td>
+            </tr>';
+
+        foreach ($questions as $i => $q) {
+            $max     = (int)($q['max_marks'] ?? 1);
+            $awarded = (int)($q['awarded']   ?? 0);
+            $pct     = $max > 0 ? $awarded / $max : 0;
+            $rowBg   = $pct >= 0.5 ? '#f0fdf4' : '#fef2f2';
+            $markCol = $pct >= 0.5 ? '#166534' : '#991b1b';
+            $crit    = $q['criterion'] ?? $q['question'] ?? '—';
+            if (preg_match('/^\[([^\]]+)\]\s*(.+)/su', $crit, $cm)) {
+                $crit = '[' . $cm[1] . '] ' . trim($cm[2]);
+            }
+            $tableHtml .= sprintf(
+                '<tr style="background-color:%s;">
+                    <td align="center" style="font-weight:bold; color:%s;">%d</td>
+                    <td style="font-size:8pt;">%s</td>
+                    <td align="center">%d</td>
+                    <td align="center" style="font-weight:bold; color:%s;">%d</td>
+                    <td style="font-size:8pt; color:#374151;">%s</td>
+                </tr>',
+                $rowBg, $markCol, $i + 1,
+                htmlspecialchars($crit), $max, $markCol, $awarded,
+                htmlspecialchars($q['comment'] ?? '—')
+            );
+        }
+        $tableHtml .= '</table>';
+        $pdf->writeHTML($tableHtml, true, false, true, false, '');
+        $pdf->Ln(4);
+
+        // Totals / verdict
+        $totalMax     = array_sum(array_column($questions, 'max_marks'));
+        $totalAwarded = array_sum(array_column($questions, 'awarded'));
+        $pctTotal     = $totalMax > 0 ? round($totalAwarded / $totalMax * 100) : 0;
+        $isC          = ($d['verdict'] ?? '') === 'COMPETENT';
+
+        $pdf->writeHTML(sprintf(
+            '<table border="0.5" cellpadding="6" style="font-size:11pt;">
+                <tr style="background-color:%s;">
+                    <td width="55%%"><b>Total Score:</b> %d / %d &nbsp;(%d%%)</td>
+                    <td width="45%%" align="center" style="font-weight:bold; color:%s; font-size:13pt;">%s</td>
+                </tr>
+            </table>',
+            $isC ? '#f0fdf4' : '#fef2f2',
+            $totalAwarded, $totalMax, $pctTotal,
+            $isC ? '#166534' : '#991b1b',
+            $isC ? '✓ COMPETENT' : '✗ NOT YET COMPETENT'
+        ), true, false, true, false, '');
+
+        $pdf->Ln(6);
+        $pdf->SetFont('dejavusans', 'I', 7);
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->Cell(0, 5, 'CONFIDENTIAL — For assessment and moderation purposes only.', 0, 1, 'C');
+    }
+
+    /**
+     * Draw a red vector tick or cross stamp at (x, y) in mm.
+     * Matches the SVG path style the assessor sees in the browser — no background circle,
+     * clean stroked lines, red for both types.
+     */
+    private function drawStampOnPage(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $x, float $y, string $type): void
+    {
+        $s  = 5.0;  // half-size in mm  (≈ the browser's 16px STAMP_SIZE at 96 dpi)
+        $sw = 0.9;  // stroke width in mm
+
+        $pdf->SetDrawColor(220, 38, 38); // red — same as browser (#dc2626)
+        $pdf->SetLineWidth($sw);
+
+        if ($type === 'tick') {
+            $pdf->Line($x - $s * 0.55, $y + $s * 0.06, $x - $s * 0.06, $y + $s * 0.55);
+            $pdf->Line($x - $s * 0.06, $y + $s * 0.55, $x + $s * 0.62, $y - $s * 0.50);
+        } else {
+            $pdf->Line($x - $s * 0.50, $y - $s * 0.50, $x + $s * 0.50, $y + $s * 0.50);
+            $pdf->Line($x + $s * 0.50, $y - $s * 0.50, $x - $s * 0.50, $y + $s * 0.50);
+        }
+
+        $pdf->SetDrawColor(0, 0, 0);
+        $pdf->SetLineWidth(0.2);
+    }
+
+
+    // ─── Drawing ─────────────────────────────────────────────────────────────────
+
+    private function drawPage(\setasign\Fpdi\Tcpdf\Fpdi $pdf, array $d): void
+    {
+        $lm = 20;  // left margin (mm)
+        $w  = 170; // content width (mm)
+        $y  = 20;
+
+        // ── Blue header banner ──────────────────────────────────────────────────
+        $pdf->SetFillColorArray(self::NAVY);
+        $pdf->SetTextColorArray(self::WHITE);
+        $pdf->SetFont('dejavusans', 'B', 16);
+        $pdf->SetXY($lm, $y);
+        $pdf->Cell($w, 14, 'ASSESSOR DECLARATION', 0, 1, 'C', true);
+        $y += 14;
+
+        // ── Provider / organisation sub-header ─────────────────────────────────
+        $pdf->SetFillColorArray(self::NAVY);
+        $pdf->SetTextColorArray(self::WHITE);
+        $pdf->SetFont('dejavusans', '', 9);
+        $pdf->SetXY($lm, $y);
+        $provider = $d['assessment_provider'] ?? 'Assessment Provider';
+        $pdf->Cell($w, 6, $provider, 0, 1, 'C', true);
+        $y += 8;
+
+        // ── Assignment info box ─────────────────────────────────────────────────
+        $y = $this->drawInfoBox($pdf, $lm, $y, $w, [
+            ['Assignment',    $d['assignment_name']   ?? '—'],
+            ['Qualification', ($d['qualification_name'] ?? '—')
+                . ($d['saqa_id'] ? '  |  SAQA ID: ' . $d['saqa_id'] : '')],
+        ]);
+        $y += 4;
+
+        // ── Learner info box ────────────────────────────────────────────────────
+        $y = $this->drawInfoBox($pdf, $lm, $y, $w, [
+            ['Learner',     $d['learner_name'] ?? '—'],
+            ['Student No',  $d['student_no']   ?? '—'],
+        ]);
+        $y += 6;
+
+        // ── Declaration text ────────────────────────────────────────────────────
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->SetFont('dejavusans', '', 9);
+        $pdf->SetXY($lm, $y);
+
+        $assessorName = $d['assessor_name']    ?? 'the assessor';
+        $etqa         = $d['etqa_registration'] ?? '—';
+
+        $declaration  = "I, {$assessorName}, with ETQA registration number {$etqa}, hereby declare that "
+            . "I have assessed the evidence contained in this Portfolio of Evidence against the relevant "
+            . "assessment criteria and that the above-named learner has been found:";
+
+        $pdf->SetFont('dejavusans', 'I', 9);
+        $pdf->MultiCell($w, 5, $declaration, 0, 'L');
+        $y = $pdf->GetY() + 8;
+
+        // ── Verdict checkboxes ──────────────────────────────────────────────────
+        $verdict      = $d['verdict'] ?? '';
+        $isCompetent  = $verdict === 'COMPETENT';
+        $colW         = $w / 2;
+
+        // Competent
+        $pdf->SetXY($lm, $y);
+        $this->drawCheckbox($pdf, $lm + 8, $y + 1, $isCompetent);
+        $pdf->SetFont('dejavusans', 'B', 11);
+        $pdf->SetTextColorArray($isCompetent ? self::GREEN : self::GRAY);
+        $pdf->SetXY($lm + 18, $y);
+        $pdf->Cell($colW - 18, 8, 'COMPETENT', 0, 0, 'L');
+
+        // Not Yet Competent
+        $this->drawCheckbox($pdf, $lm + $colW + 8, $y + 1, !$isCompetent);
+        $pdf->SetTextColorArray($isCompetent ? self::GRAY : self::RED);
+        $pdf->SetXY($lm + $colW + 18, $y);
+        $pdf->Cell($colW - 18, 8, 'NOT YET COMPETENT', 0, 1, 'L');
+
+        $y += 16;
+
+        // ── Signature lines ─────────────────────────────────────────────────────
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->SetFont('dejavusans', '', 9);
+        $dateStr = is_string($d['date']) ? $d['date'] : ($d['date'] ? $d['date']->format('d F Y') : date('d F Y'));
+
+        $lines = [
+            ['Name',              $d['assessor_name']     ?? ''],
+            ['ETQA Registration', $d['etqa_registration'] ?? ''],
+            ['Date',              $dateStr],
+            ['Signature',         ''],
+        ];
+
+        foreach ($lines as [$label, $value]) {
+            $pdf->SetXY($lm, $y);
+            $pdf->SetFont('dejavusans', 'B', 9);
+            $pdf->Cell(42, 7, $label . ':', 0, 0, 'L');
+            $pdf->SetFont('dejavusans', '', 9);
+            $pdf->Cell($w - 42, 7, $value, 'B', 1, 'L');
+            $y += 10;
+        }
+
+        $y += 4;
+
+        // ── Official Stamp box ──────────────────────────────────────────────────
+        $stampW = 60;
+        $stampH = 35;
+        $pdf->SetDrawColorArray(self::BORDER);
+        $pdf->SetLineStyle(['width' => 0.3, 'dash' => '3,2']);
+        $pdf->Rect($lm, $y, $stampW, $stampH, 'D');
+        $pdf->SetLineStyle(['width' => 0.2, 'dash' => '']);
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetFont('dejavusans', 'I', 8);
+        $pdf->SetXY($lm, $y + $stampH / 2 - 3);
+        $pdf->Cell($stampW, 6, 'Official Stamp', 0, 0, 'C');
+
+        // ── Footer ──────────────────────────────────────────────────────────────
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetFont('dejavusans', 'I', 7);
+        $pdf->SetXY($lm, 280);
+        $pdf->Cell($w, 5, 'CONFIDENTIAL — For assessment and moderation purposes only.  QCTO Assessor Declaration', 0, 0, 'C');
+    }
+
+    private function drawInfoBox(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $x, float $y, float $w, array $rows): float
+    {
+        $rowH   = 6.5;
+        $height = count($rows) * $rowH + 5;
+        $labelW = 45;
+
+        $pdf->SetFillColorArray(self::LIGHT);
+        $pdf->SetDrawColorArray(self::BORDER);
+        $pdf->RoundedRect($x, $y, $w, $height, 2, '1111', 'DF');
+
+        $cy = $y + 3;
+        foreach ($rows as [$label, $value]) {
+            $pdf->SetFont('dejavusans', 'B', 8.5);
+            $pdf->SetTextColorArray(self::BLACK);
+            $pdf->SetXY($x + 4, $cy);
+            $pdf->Cell($labelW, $rowH, $label . ':', 0, 0, 'L');
+
+            $pdf->SetFont('dejavusans', '', 8.5);
+            $pdf->SetTextColorArray([50, 50, 50]);
+            $pdf->Cell($w - $labelW - 8, $rowH, $value, 0, 1, 'L');
+
+            $cy += $rowH;
+        }
+
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->SetDrawColorArray([0, 0, 0]);
+
+        return $y + $height;
+    }
+
+    private function drawCheckbox(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $x, float $y, bool $checked): void
+    {
+        $size = 6;
+        $pdf->SetDrawColorArray([60, 60, 60]);
+        $pdf->SetFillColorArray(self::WHITE);
+        $pdf->SetLineWidth(0.5);
+        $pdf->Rect($x, $y, $size, $size, 'DF');
+        $pdf->SetLineWidth(0.2);
+
+        if ($checked) {
+            $pdf->SetDrawColorArray([0, 120, 0]);
+            $pdf->SetLineWidth(1.2);
+            // Draw a tick inside the box
+            $pdf->Line($x + 1, $y + 3, $x + 2.5, $y + 5);
+            $pdf->Line($x + 2.5, $y + 5, $x + 5.5, $y + 1);
+            $pdf->SetLineWidth(0.2);
+            $pdf->SetDrawColorArray([0, 0, 0]);
+        }
+    }
+}

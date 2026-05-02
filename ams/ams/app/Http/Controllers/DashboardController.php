@@ -31,6 +31,7 @@ class DashboardController extends Controller
                 ->whereHas('learner', fn ($q) =>
                     $q->where('cohort_id', $context->cohort_id)
                 )
+                ->whereHas('assignment')
                 ->latest()
                 ->limit(5)
                 ->get();
