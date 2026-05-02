@@ -68,7 +68,7 @@
      ╚══════════════════════════════════════════════════════════════════╝ --}}
 <div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-5">
 
-    {{-- ── Title row ──────────────────────────────────────────────── --}}
+    {{-- ── Title row (with page-level navigation buttons on the right) ── --}}
     <div class="px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
         <div class="min-w-0">
             <h1 class="text-xl font-bold text-gray-900">{{ $submission->assignment->name }}</h1>
@@ -85,6 +85,36 @@
                 </span>
                 @endif
             </div>
+        </div>
+
+        {{-- Page-level navigation buttons --}}
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
+            <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white
+                      text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition shadow-sm">
+                ← Back to POE
+            </a>
+
+            @if($submission->status === 'review_required' && $result)
+            <a href="#signoff-form"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50
+                      text-xs font-semibold text-amber-700 hover:bg-amber-100 transition shadow-sm"
+               title="Jump to sign-off form">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Sign Off ↓
+            </a>
+            @endif
+
+            <button id="btn-fullscreen" type="button"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white
+                           text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition shadow-sm"
+                    title="Enter fullscreen marking mode">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+                </svg>
+                Fullscreen
+            </button>
         </div>
     </div>
 
@@ -272,54 +302,20 @@
 {{-- Fullscreen wrapper --}}
 <div id="review-area">
 
-    {{-- ── Marking toolbar ───────────────────────────────────── --}}
-    <div class="review-toolbar flex items-center justify-between mb-4 flex-wrap gap-2">
-        <p class="text-xs text-gray-400">
-            Reviewing: <strong class="text-gray-600">{{ $learner->full_name }}</strong>
-            &mdash; {{ $submission->assignment->name }}
-        </p>
-        <div class="flex items-center gap-2 flex-wrap">
-            <a href="{{ route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner]) }}"
-               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white
-                      text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition shadow-sm">
-                ← Back to POE
-            </a>
+    {{-- Floating Exit Fullscreen button — only visible while fullscreen is active.
+         Lives inside #review-area so it remains in the DOM during fullscreen.
+         Esc also exits natively. --}}
+    <button id="btn-exit-fullscreen" type="button"
+            class="hidden fixed top-3 right-3 z-50 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-300
+                   bg-orange-50 text-xs font-semibold text-orange-700 hover:bg-orange-100 transition shadow-sm"
+            title="Exit fullscreen (Esc)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>
+        </svg>
+        Exit Fullscreen
+    </button>
 
-            {{-- Quick anchor: Sign Off (only when review is needed) --}}
-            @if($submission->status === 'review_required' && $result)
-            <a href="#signoff-form"
-               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50
-                      text-xs font-semibold text-amber-700 hover:bg-amber-100 transition shadow-sm"
-               title="Jump to sign-off form">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                Sign Off ↓
-            </a>
-            @endif
-
-            <button id="btn-fullscreen" type="button"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white
-                           text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition shadow-sm"
-                    title="Enter fullscreen marking mode">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
-                </svg>
-                Fullscreen
-            </button>
-            <button id="btn-exit-fullscreen" type="button"
-                    class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-300
-                           bg-orange-50 text-xs font-semibold text-orange-700 hover:bg-orange-100 transition shadow-sm"
-                    title="Exit fullscreen">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>
-                </svg>
-                Exit Fullscreen
-            </button>
-        </div>
-    </div>
-
-{{-- (Status & Action bars are now consolidated inside the header panel above) --}}
 
 <div class="review-columns flex gap-5 items-start">
 
@@ -1572,13 +1568,6 @@ document.getElementById('btn-save-criteria')?.addEventListener('click', async ()
     flex-direction: column;
     overflow: hidden;
     gap: 0;
-}
-
-/* Toolbar stays compact at top */
-#review-area:fullscreen .review-toolbar,
-#review-area:-webkit-full-screen .review-toolbar {
-    flex-shrink: 0;
-    margin-bottom: 0.5rem;
 }
 
 /* Columns fill remaining height */
