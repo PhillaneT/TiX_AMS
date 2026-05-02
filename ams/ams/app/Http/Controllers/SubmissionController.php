@@ -232,7 +232,7 @@ class SubmissionController extends Controller
         ]);
 
         return redirect()
-            ->route('qualifications.cohorts.learners.poe', [$qualification, $cohort, $learner])
+            ->route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $submission])
             ->with('success', 'Result signed off. Annotated PDF generated.');
     }
 

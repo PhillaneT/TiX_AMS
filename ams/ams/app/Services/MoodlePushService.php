@@ -186,7 +186,7 @@ class MoodlePushService
         if ($pdfContents && $pdfFilename) {
             $draftId = $this->uploadFeedbackFile($pdfContents, $pdfFilename);
             if ($draftId) {
-                $params['plugindata[files_filemanager]'] = $draftId;
+                $params['plugindata[assignfeedback_file_filemanager]'] = $draftId;
             }
         }
 

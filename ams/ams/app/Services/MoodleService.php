@@ -185,7 +185,7 @@ class MoodleService
         if ($pdfContents !== null && $pdfFilename !== null) {
             $draftId = $this->uploadFileToDraft($pdfContents, $pdfFilename);
             if ($draftId !== null) {
-                $params['plugindata[files_filemanager]'] = $draftId;
+                $params['plugindata[assignfeedback_file_filemanager]'] = $draftId;
             }
         }
 
