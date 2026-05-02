@@ -256,7 +256,13 @@ class LmsSyncController extends Controller
             ? 'Grade, criterion scores, and feedback pushed to Moodle (advanced grading).'
             : 'Grade and feedback pushed to Moodle successfully.';
 
-        return redirect()->back()->with('success', $message);
+        $redirect = redirect()->back()->with('success', $message);
+
+        if (! empty($pushResult['debug'])) {
+            $redirect = $redirect->with('push_debug', $pushResult['debug']);
+        }
+
+        return $redirect;
     }
 
     /**

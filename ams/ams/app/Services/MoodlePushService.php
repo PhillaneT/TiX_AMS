@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\LmsConnection;
 use App\Models\Submission;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -43,7 +44,7 @@ class MoodlePushService
      *   3. Try advanced criterion-level push (marking guide or rubric)
      *   4. Fall back to simple grade + text feedback + PDF on advanced failure
      *
-     * @return array{ok: bool, error: string|null, method: string|null}
+     * @return array{ok: bool, error: string|null, method: string|null, debug: string|null}
      *   method values: 'advanced_guide' | 'advanced_rubric' | 'simple'
      */
     public function pushToMoodle(Submission $submission): array
@@ -72,6 +73,15 @@ class MoodlePushService
         $feedbackText = $this->buildFeedbackText($result);
         [$pdfContents, $pdfFilename] = $this->resolveGradedPdf($submission, $result);
 
+        Log::info('MoodlePushService: starting push', [
+            'submission_id'   => $submission->id,
+            'moodle_assign_id'=> $moodleAssignId,
+            'moodle_user_id'  => $moodleUserId,
+            'grade'           => $grade,
+            'has_pdf'         => $pdfContents !== null,
+            'questions_count' => count($result->questions_json ?? []),
+        ]);
+
         // ── Step 1: attempt advanced criterion-level grading ──────────────────
         $advanced = $this->tryPushAdvancedGrade(
             $moodleAssignId,
@@ -84,12 +94,20 @@ class MoodlePushService
         );
 
         if ($advanced['ok']) {
+            $method = 'advanced_' . ($advanced['grading_method'] ?? 'unknown');
+            Log::info('MoodlePushService: advanced push succeeded', ['method' => $method]);
             return [
                 'ok'     => true,
                 'error'  => null,
-                'method' => 'advanced_' . ($advanced['grading_method'] ?? 'unknown'),
+                'method' => $method,
+                'debug'  => "Advanced grading ({$method}) succeeded.",
             ];
         }
+
+        $advancedFailReason = $advanced['error'] ?? 'unknown reason';
+        Log::warning('MoodlePushService: advanced push failed, falling back to simple', [
+            'reason' => $advancedFailReason,
+        ]);
 
         // ── Step 2: fall back to simple grade + feedback + PDF ────────────────
         // Use the existing MoodleService::pushGrade() which already handles
@@ -104,10 +122,17 @@ class MoodlePushService
         );
 
         if (! $simple['ok']) {
-            return ['ok' => false, 'error' => $simple['error'], 'method' => null];
+            Log::error('MoodlePushService: simple push also failed', ['error' => $simple['error']]);
+            return ['ok' => false, 'error' => $simple['error'], 'method' => null, 'debug' => null];
         }
 
-        return ['ok' => true, 'error' => null, 'method' => 'simple'];
+        Log::info('MoodlePushService: simple push succeeded');
+        return [
+            'ok'     => true,
+            'error'  => null,
+            'method' => 'simple',
+            'debug'  => "Simple push used (advanced grading skipped: {$advancedFailReason}).",
+        ];
     }
 
     // =========================================================================
@@ -137,17 +162,28 @@ class MoodlePushService
         ?string $pdfFilename
     ): array {
         if (empty($questions)) {
+            Log::info('tryPushAdvancedGrade: no questions_json, skipping');
             return ['ok' => false, 'error' => 'No criteria available for advanced grading.'];
         }
 
         $definition = $this->fetchGradingDefinition($assignmentId);
         if (! $definition) {
+            Log::info('tryPushAdvancedGrade: fetchGradingDefinition returned null', [
+                'assignment_id' => $assignmentId,
+            ]);
             // No advanced grading configured — silent fallback expected
             return ['ok' => false, 'error' => 'No advanced grading definition found for this assignment.'];
         }
 
         $gradingMethod  = $definition['method'];   // 'guide' or 'rubric'
         $moodleCriteria = $definition['criteria'];
+
+        Log::info('tryPushAdvancedGrade: grading definition fetched', [
+            'method'          => $gradingMethod,
+            'criteria_count'  => count($moodleCriteria),
+            'moodle_criteria' => array_map(fn($c) => $c['description'] ?? $c['shortname'] ?? '?', $moodleCriteria),
+            'our_criteria'    => array_map(fn($q) => $q['criterion'] ?? $q['question'] ?? '?', $questions),
+        ]);
 
         if (empty($moodleCriteria)) {
             return ['ok' => false, 'error' => 'Advanced grading definition has no criteria.'];
@@ -160,15 +196,24 @@ class MoodlePushService
             default  => [],
         };
 
+        Log::info('tryPushAdvancedGrade: criterion params built', [
+            'param_count' => count($criterionParams),
+            'param_keys'  => array_keys($criterionParams),
+        ]);
+
         if (empty($criterionParams)) {
             return ['ok' => false, 'error' => "Could not match any criteria to the '{$gradingMethod}' grading definition."];
         }
 
-        // Base grade payload (identical to simple push)
+        // For rubric grading: pass -1 so Moodle computes grade from the rubric levels.
+        // For marking guide: pass the computed percentage directly.
+        $gradeParam = ($gradingMethod === 'rubric') ? -1 : $grade;
+
+        // Base grade payload
         $params = [
             'assignmentid'  => $assignmentId,
             'userid'        => $userId,
-            'grade'         => $grade,
+            'grade'         => $gradeParam,
             'attemptnumber' => -1,
             'addattempt'    => 0,
             'workflowstate' => 'released',
@@ -192,12 +237,23 @@ class MoodlePushService
 
         $callResult = $this->apiCall('mod_assign_save_grade', $params);
 
+        Log::info('tryPushAdvancedGrade: mod_assign_save_grade result', [
+            'ok'    => $callResult['ok'],
+            'error' => $callResult['error'] ?? null,
+            'had_file' => isset($params['plugindata[assignfeedback_file_filemanager]']),
+        ]);
+
         // If the call failed because the file-feedback plugin is not enabled,
         // retry without the file attachment so the grade + feedback still push.
         if (! $callResult['ok'] && isset($params['plugindata[assignfeedback_file_filemanager]'])) {
             $paramsNoFile = $params;
             unset($paramsNoFile['plugindata[assignfeedback_file_filemanager]']);
             $callResult = $this->apiCall('mod_assign_save_grade', $paramsNoFile);
+
+            Log::info('tryPushAdvancedGrade: retry without file', [
+                'ok'    => $callResult['ok'],
+                'error' => $callResult['error'] ?? null,
+            ]);
         }
 
         if ($callResult['ok']) {
@@ -220,28 +276,43 @@ class MoodlePushService
         $cmid       = $assignment?->lms_cmid ? (int) $assignment->lms_cmid : null;
 
         if (! $cmid) {
+            Log::info('fetchGradingDefinition: no lms_cmid on assignment', ['assignment_id' => $assignmentId]);
             return null; // cmid not yet synced — fall through to simple push
         }
+
+        Log::info('fetchGradingDefinition: calling core_grading_get_definitions', ['cmid' => $cmid]);
 
         $result = $this->apiCall('core_grading_get_definitions', [
             'cmids[0]' => $cmid,
             'includes' => 'all',
         ]);
 
-        if (! $result['ok']) return null;
+        if (! $result['ok']) {
+            Log::warning('fetchGradingDefinition: API call failed', ['error' => $result['error'] ?? 'unknown']);
+            return null;
+        }
 
         $areas = $result['data']['areas'] ?? [];
+        Log::info('fetchGradingDefinition: areas returned', ['count' => count($areas)]);
         if (empty($areas)) return null;
 
         $area   = $areas[0];
         // Moodle returns 'activemethod', not 'method'
         $method = $area['activemethod'] ?? $area['method'] ?? null;
 
+        Log::info('fetchGradingDefinition: activemethod', ['method' => $method]);
+
         // Only handle marking guide and rubric — everything else falls back
-        if (! in_array($method, ['guide', 'rubric'], true)) return null;
+        if (! in_array($method, ['guide', 'rubric'], true)) {
+            Log::info('fetchGradingDefinition: unsupported grading method, falling back', ['method' => $method]);
+            return null;
+        }
 
         $definitions = $area['definitions'] ?? [];
-        if (empty($definitions)) return null;
+        if (empty($definitions)) {
+            Log::info('fetchGradingDefinition: no definitions in area');
+            return null;
+        }
 
         $def      = $definitions[0];
         $criteria = match ($method) {
