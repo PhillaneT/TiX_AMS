@@ -324,24 +324,34 @@ class LmsSyncController extends Controller
                 ->where('lms_submission_id', $moodleSubId)
                 ->first();
 
-            if ($existing) continue;
+            // Resolve real name via API (falls back to Moodle placeholder if unavailable)
+            $resolvedName = $this->resolveMoodleUserName($service, $moodleUserId, $moodleSub);
 
-            // Parse the Moodle full name into first / last
-            $moodleFullName = trim($moodleSub['userfullname'] ?? '');
-            $nameParts      = $moodleFullName !== ''
-                ? explode(' ', $moodleFullName, 2)
-                : ['Moodle', 'User ' . $moodleUserId];
-            $firstName = $nameParts[0];
-            $lastName  = $nameParts[1] ?? ('User ' . $moodleUserId);
-
+            // Always upsert learner so names stay current on every sync
             $learner = Learner::firstOrCreate([
                 'cohort_id'    => $cohort->id,
                 'external_ref' => 'moodle_' . $moodleUserId,
             ], [
-                'first_name' => $firstName,
-                'last_name'  => $lastName,
-                'email'      => null,
+                'first_name' => $resolvedName['first'],
+                'last_name'  => $resolvedName['last'],
+                'email'      => $resolvedName['email'],
             ]);
+
+            // Update name / email if learner already existed with a placeholder name
+            if (! $learner->wasRecentlyCreated) {
+                $isPlaceholder = str_starts_with($learner->first_name, 'Moodle') &&
+                                 str_starts_with($learner->last_name, 'User ');
+                $hasRealName   = $resolvedName['first'] !== 'Moodle';
+                if ($isPlaceholder && $hasRealName) {
+                    $learner->update([
+                        'first_name' => $resolvedName['first'],
+                        'last_name'  => $resolvedName['last'],
+                        'email'      => $resolvedName['email'] ?: $learner->email,
+                    ]);
+                }
+            }
+
+            if ($existing) continue;
 
             $fileList = collect($moodleSub['plugins'] ?? [])
                 ->where('type', 'file')
@@ -491,5 +501,45 @@ class LmsSyncController extends Controller
         $lines[] = 'Assessed by: ' . ($result->assessor_name ?? auth()->user()->name);
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Resolve a Moodle user's real name via API, falling back to the submission's
+     * userfullname field, and finally to a "Moodle User X" placeholder.
+     * Returns ['first' => string, 'last' => string, 'email' => string|null].
+     */
+    private function resolveMoodleUserName(MoodleService $service, int $moodleUserId, array $moodleSub): array
+    {
+        // Try the API first (requires core_user_get_users_by_field permission)
+        try {
+            $user = $service->getUser($moodleUserId);
+            if (! empty($user['firstname'])) {
+                return [
+                    'first' => $user['firstname'],
+                    'last'  => $user['lastname'] ?? '',
+                    'email' => $user['email'] ?? null,
+                ];
+            }
+        } catch (\Throwable) {
+            // Permission not granted — fall through to inline name
+        }
+
+        // Fall back to userfullname returned inline with the submission
+        $fullName = trim($moodleSub['userfullname'] ?? '');
+        if ($fullName !== '') {
+            $parts = explode(' ', $fullName, 2);
+            return [
+                'first' => $parts[0],
+                'last'  => $parts[1] ?? '',
+                'email' => null,
+            ];
+        }
+
+        // Last resort placeholder
+        return [
+            'first' => 'Moodle',
+            'last'  => 'User ' . $moodleUserId,
+            'email' => null,
+        ];
     }
 }
