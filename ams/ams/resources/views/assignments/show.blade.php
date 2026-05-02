@@ -45,17 +45,32 @@
             <div>
                 <p class="text-xs text-gray-500 font-medium">Total Marks</p>
                 <p class="text-sm font-semibold text-gray-800 mt-1">
-                    {{ $assignment->total_marks ?? '—' }}
-                    @if($assignment->questions->isNotEmpty())
+                    @if($assignment->memo_type === 'rubric' && !empty($assignment->rubric_json))
+                        @php
+                            $rubricTotal = collect($assignment->rubric_json)->sum(function($c) {
+                                return collect($c['levels'] ?? [])->max('score') ?? 0;
+                            });
+                        @endphp
+                        {{ $rubricTotal }}
+                        <span class="text-xs font-normal text-gray-400 ml-1">(from rubric)</span>
+                    @elseif($assignment->questions->isNotEmpty())
+                        {{ $assignment->questions->sum('marks') }}
                         <span class="text-xs font-normal text-gray-400 ml-1">(from questions)</span>
+                    @else
+                        {{ $assignment->total_marks ?? '—' }}
                     @endif
                 </p>
             </div>
             <div>
-                <p class="text-xs text-gray-500 font-medium">Memo</p>
+                <p class="text-xs text-gray-500 font-medium">Marking Method</p>
                 <p class="text-sm font-semibold text-gray-800 mt-1">
                     @if($assignment->memo_type === 'questions')
                         <span class="inline-flex items-center gap-1 text-orange-600">Per-question (see below)</span>
+                    @elseif($assignment->memo_type === 'rubric')
+                        <span class="inline-flex items-center gap-1 text-purple-600">
+                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                            Rubric (see below)
+                        </span>
                     @elseif($assignment->memo_type === 'pdf' && $assignment->memo_path)
                         <a href="{{ route('qualifications.assignments.memo', [$qualification, $assignment]) }}"
                             class="inline-flex items-center gap-1 text-red-600 hover:text-red-800">
@@ -108,7 +123,76 @@
     </div>
     @endif
 
-    {{-- Questions section --}}
+    {{-- ===== RUBRIC section ===== --}}
+    @if($assignment->memo_type === 'rubric')
+    <div id="rubric">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-semibold text-gray-900">
+                Rubric
+                @if(!empty($assignment->rubric_json))
+                    <span class="ml-1.5 text-xs font-normal text-gray-400">
+                        {{ count($assignment->rubric_json) }} {{ count($assignment->rubric_json) === 1 ? 'criterion' : 'criteria' }}
+                    </span>
+                @endif
+            </h2>
+            <a href="{{ route('qualifications.assignments.edit', [$qualification, $assignment]) }}#memo_rubric_area"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                Edit Rubric
+            </a>
+        </div>
+
+        @if(empty($assignment->rubric_json))
+            <div class="bg-white rounded-xl border border-dashed border-gray-300 px-5 py-8 text-center">
+                <p class="text-sm text-gray-500 mb-1">No rubric defined yet.</p>
+                <p class="text-xs text-gray-400">Go to Edit to build the rubric criteria and performance levels.</p>
+                <a href="{{ route('qualifications.assignments.edit', [$qualification, $assignment]) }}"
+                    class="inline-flex items-center gap-1.5 mt-4 px-4 py-2 text-sm font-medium bg-[#1e3a5f] text-white rounded-lg hover:bg-[#e3b64d] hover:text-[#1e3a5f] transition-colors">
+                    Build Rubric
+                </a>
+            </div>
+        @else
+            <div class="space-y-3">
+                @foreach($assignment->rubric_json as $ci => $criterion)
+                @php
+                    $maxScore = collect($criterion['levels'] ?? [])->max('score') ?? 0;
+                    $sortedLevels = collect($criterion['levels'] ?? [])->sortBy('score')->values();
+                @endphp
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-3 bg-gray-50">
+                        <span class="w-6 h-6 flex items-center justify-center rounded-full bg-[#1e3a5f] text-white text-xs font-bold shrink-0">{{ $ci + 1 }}</span>
+                        <span class="text-sm font-semibold text-gray-800 flex-1">{{ $criterion['title'] ?? 'Criterion ' . ($ci + 1) }}</span>
+                        <span class="text-xs text-gray-500 shrink-0">max {{ $maxScore }} pts</span>
+                    </div>
+                    @if(!empty($criterion['description']))
+                        <p class="px-5 py-2 text-xs text-gray-500 border-b border-gray-100">{{ $criterion['description'] }}</p>
+                    @endif
+                    <div class="divide-y divide-gray-50">
+                        @foreach($sortedLevels as $level)
+                        <div class="px-5 py-3 flex items-start gap-4">
+                            <span class="shrink-0 w-12 text-center">
+                                <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold
+                                    @if($level['score'] == $maxScore) bg-green-100 text-green-700
+                                    @elseif($level['score'] == 0) bg-red-50 text-red-400
+                                    @else bg-amber-50 text-amber-600
+                                    @endif">
+                                    {{ $level['score'] }}
+                                </span>
+                            </span>
+                            <p class="text-xs text-gray-700 leading-relaxed flex-1">
+                                {{ $level['description'] ?: '—' }}
+                            </p>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        @endif
+    </div>
+    @endif
+
+    {{-- ===== Questions section (only for non-rubric assignments) ===== --}}
+    @if($assignment->memo_type !== 'rubric')
     <div>
         <div class="flex items-center justify-between mb-2">
             <h2 class="text-sm font-semibold text-gray-900">
@@ -139,22 +223,17 @@
             <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100" id="questions-list">
                 @foreach($assignment->questions as $question)
                 <div class="px-5 py-4 flex items-start gap-4" data-question-id="{{ $question->id }}">
-                    {{-- Drag handle --}}
                     <div class="mt-0.5 cursor-grab text-gray-300 hover:text-gray-400 shrink-0 drag-handle" title="Drag to reorder">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
                         </svg>
                     </div>
-
-                    {{-- Label + marks badge --}}
                     <div class="shrink-0 w-16 text-center">
                         @if($question->label)
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-50 text-orange-700">{{ $question->label }}</span>
                         @endif
                         <p class="text-xs text-gray-500 mt-1 font-medium">{{ $question->marks }} mk{{ $question->marks === 1 ? '' : 's' }}</p>
                     </div>
-
-                    {{-- Question content --}}
                     <div class="flex-1 min-w-0">
                         <p class="text-sm text-gray-800 font-medium leading-snug">{{ Str::limit($question->question_text, 150) }}</p>
                         @if($question->expected_answer)
@@ -170,8 +249,6 @@
                             </details>
                         @endif
                     </div>
-
-                    {{-- Actions --}}
                     <div class="shrink-0 flex items-center gap-2">
                         <a href="{{ route('qualifications.assignments.questions.edit', [$qualification, $assignment, $question]) }}"
                             class="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors">Edit</a>
@@ -185,10 +262,10 @@
                 </div>
                 @endforeach
             </div>
-
             <p class="text-xs text-gray-400 mt-2 px-1">Drag rows to reorder, or set the order number when editing a question.</p>
         @endif
     </div>
+    @endif
 
     {{-- Text memo --}}
     @if($assignment->memo_type === 'text' && $assignment->memo_text)

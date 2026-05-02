@@ -65,6 +65,7 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1.5">Total marks</label>
                     <input type="number" name="total_marks" value="{{ old('total_marks', $assignment->total_marks) }}" min="1"
                         class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                    <p class="text-xs text-gray-400 mt-1">For rubric assignments, total is derived from the rubric levels.</p>
                 </div>
 
                 {{-- AI Grading Instructions --}}
@@ -82,6 +83,7 @@
                     <p class="text-xs text-gray-400 mt-1">These instructions override the system default for this assignment only. Max 3 000 characters.</p>
                 </div>
 
+                {{-- Marking Method --}}
                 <div class="col-span-2 pt-2 border-t border-gray-100">
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Marking Method</label>
                     <p class="text-xs text-gray-500 mb-3">Per-question is the recommended approach — the AI gets precise, question-level anchors.</p>
@@ -96,6 +98,17 @@
                                 <span class="text-sm font-medium text-gray-800">Per-question memo</span>
                                 <span class="ml-2 text-xs font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Recommended</span>
                                 <p class="text-xs text-gray-500 mt-0.5">Manage individual questions with model answers on the assignment page.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
+                            <input type="radio" name="memo_type" value="rubric" id="mt_rubric"
+                                {{ old('memo_type', $assignment->memo_type) === 'rubric' ? 'checked' : '' }}
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
+                                onchange="toggleMemoType()">
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Rubric</span>
+                                <span class="ml-2 text-xs font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Structured</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Define criteria and performance levels with point values. Import directly from Moodle if this assignment uses a rubric there.</p>
                             </div>
                         </label>
                         <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
@@ -120,6 +133,7 @@
                         </label>
                     </div>
 
+                    {{-- Per-question area --}}
                     <div id="memo_questions_area">
                         @php $qCount = $assignment->questions()->count(); @endphp
                         @if($qCount > 0)
@@ -135,12 +149,30 @@
                         @endif
                     </div>
 
+                    {{-- Rubric builder area --}}
+                    <div id="memo_rubric_area" class="{{ old('memo_type', $assignment->memo_type) !== 'rubric' ? 'hidden' : '' }}">
+                        @php
+                            $existingRubricForEdit = old('memo_type') === 'rubric'
+                                ? json_decode(old('rubric_json'), true)
+                                : $assignment->rubric_json;
+                            $rubricImportUrl = $assignment->lms_cmid
+                                ? route('qualifications.assignments.rubric.import', [$qualification, $assignment])
+                                : null;
+                        @endphp
+                        @include('assignments.partials.rubric-builder', [
+                            'existingRubric' => $existingRubricForEdit,
+                            'importUrl'      => $rubricImportUrl,
+                        ])
+                    </div>
+
+                    {{-- Text area --}}
                     <div id="memo_text_area" class="hidden">
                         <textarea name="memo_text" rows="6"
                             class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
                             placeholder="Paste the marking memo / model answers here...">{{ old('memo_text', $assignment->memo_text) }}</textarea>
                     </div>
 
+                    {{-- PDF area --}}
                     <div id="memo_file_area" class="hidden">
                         @if($assignment->memo_path)
                             <div class="mb-3 flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -179,6 +211,7 @@
 function toggleMemoType() {
     const val = document.querySelector('input[name="memo_type"]:checked')?.value;
     document.getElementById('memo_questions_area').classList.toggle('hidden', val !== 'questions');
+    document.getElementById('memo_rubric_area').classList.toggle('hidden', val !== 'rubric');
     document.getElementById('memo_text_area').classList.toggle('hidden', val !== 'text');
     document.getElementById('memo_file_area').classList.toggle('hidden', val !== 'pdf');
 }

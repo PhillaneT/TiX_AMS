@@ -198,6 +198,88 @@ class MoodleService
         return ['ok' => true, 'error' => null];
     }
 
+    /**
+     * Fetch the rubric / marking-guide definition for a Moodle course module.
+     *
+     * Returns:
+     *   ['ok' => true,  'criteria' => [...]]
+     *   ['ok' => false, 'error'    => string]
+     *
+     * Each criterion: { id, title, description, levels: [{id, score, description}] }
+     */
+    public function getGradingDefinition(int $cmid): array
+    {
+        $result = $this->call('core_grading_get_definitions', [
+            'cmids[0]' => $cmid,
+            'includes' => 'all',
+        ]);
+
+        if (! $result['ok']) {
+            return ['ok' => false, 'error' => $result['error']];
+        }
+
+        $areas = $result['data']['areas'] ?? [];
+        if (empty($areas)) {
+            return ['ok' => false, 'error' => 'No grading area found for this assignment in Moodle.'];
+        }
+
+        $area        = $areas[0];
+        $activeMethod = $area['activemethod'] ?? '';
+        $definitions = $area['definitions'] ?? [];
+
+        if (empty($definitions)) {
+            return ['ok' => false, 'error' => 'No grading definition found. The assignment may not use a rubric or marking guide.'];
+        }
+
+        $def = $definitions[0];
+
+        // ---- Parse Rubric ----
+        if ($activeMethod === 'rubric' || isset($def['rubric'])) {
+            $rawCriteria = $def['rubric']['criteria'] ?? [];
+            $criteria    = [];
+            foreach ($rawCriteria as $rc) {
+                $levels = [];
+                foreach ($rc['levels'] ?? [] as $rl) {
+                    $levels[] = [
+                        'id'          => 'ml_' . ($rl['id'] ?? uniqid()),
+                        'score'       => (float) ($rl['score'] ?? 0),
+                        'description' => trim($rl['definition'] ?? ''),
+                    ];
+                }
+                usort($levels, fn($a, $b) => $a['score'] <=> $b['score']);
+                $criteria[] = [
+                    'id'          => 'mc_' . ($rc['id'] ?? uniqid()),
+                    'title'       => trim($rc['description'] ?? 'Criterion'),
+                    'description' => trim($rc['descriptionmarkers'] ?? ''),
+                    'levels'      => $levels,
+                ];
+            }
+            return ['ok' => true, 'criteria' => $criteria];
+        }
+
+        // ---- Parse Marking Guide ----
+        if ($activeMethod === 'guide' || isset($def['guide'])) {
+            $rawCriteria = $def['guide']['criteria'] ?? [];
+            $criteria    = [];
+            foreach ($rawCriteria as $rc) {
+                $maxScore = (float) ($rc['maxscore'] ?? 0);
+                $criteria[] = [
+                    'id'          => 'mc_' . ($rc['id'] ?? uniqid()),
+                    'title'       => trim($rc['shortname'] ?? 'Criterion'),
+                    'description' => trim($rc['description'] ?? ''),
+                    'levels'      => [
+                        ['id' => 'l0_' . ($rc['id'] ?? '0'), 'score' => 0,        'description' => 'Not demonstrated'],
+                        ['id' => 'lm_' . ($rc['id'] ?? '0'), 'score' => round($maxScore / 2, 1), 'description' => 'Partially demonstrated'],
+                        ['id' => 'lx_' . ($rc['id'] ?? '0'), 'score' => $maxScore, 'description' => 'Fully demonstrated'],
+                    ],
+                ];
+            }
+            return ['ok' => true, 'criteria' => $criteria];
+        }
+
+        return ['ok' => false, 'error' => "Unsupported grading method \"{$activeMethod}\". Only rubric and marking guide are supported."];
+    }
+
     // -------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------

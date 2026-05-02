@@ -67,6 +67,7 @@
                     <input type="number" name="total_marks" value="{{ old('total_marks') }}" min="1"
                         class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                         placeholder="e.g. 100">
+                    <p class="text-xs text-gray-400 mt-1">For rubric assignments, total is derived from the rubric levels.</p>
                 </div>
 
                 {{-- AI Grading Instructions --}}
@@ -84,7 +85,7 @@
                     <p class="text-xs text-gray-400 mt-1">These instructions override the system default for this assignment only. Max 3 000 characters.</p>
                 </div>
 
-                {{-- Memo / Questions section --}}
+                {{-- Memo / Marking Method --}}
                 <div class="col-span-2 pt-2 border-t border-gray-100">
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Marking Method</label>
                     <p class="text-xs text-gray-500 mb-3">Choose how you'll provide the marking memo. Per-question is the recommended approach — the AI gets precise, question-level anchors.</p>
@@ -99,6 +100,17 @@
                                 <span class="text-sm font-medium text-gray-800">Per-question memo</span>
                                 <span class="ml-2 text-xs font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Recommended</span>
                                 <p class="text-xs text-gray-500 mt-0.5">Add each question with its model answer and mark allocation after saving. Gives the AI the best possible context.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
+                            <input type="radio" name="memo_type" value="rubric" id="mt_rubric"
+                                {{ old('memo_type') === 'rubric' ? 'checked' : '' }}
+                                class="mt-0.5 text-orange-600 focus:ring-orange-500"
+                                onchange="toggleMemoType()">
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">Rubric</span>
+                                <span class="ml-2 text-xs font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Structured</span>
+                                <p class="text-xs text-gray-500 mt-0.5">Define criteria and performance levels with point values. The AI evaluates each criterion against the rubric levels.</p>
                             </div>
                         </label>
                         <label class="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50">
@@ -123,6 +135,7 @@
                         </label>
                     </div>
 
+                    {{-- Per-question area --}}
                     <div id="memo_questions_area">
                         <div class="bg-orange-50 border border-orange-200 rounded-lg px-4 py-4 text-sm text-orange-800">
                             <p class="font-medium mb-1">Questions are added after saving.</p>
@@ -130,6 +143,15 @@
                         </div>
                     </div>
 
+                    {{-- Rubric builder area --}}
+                    <div id="memo_rubric_area" class="hidden">
+                        @include('assignments.partials.rubric-builder', [
+                            'existingRubric' => old('memo_type') === 'rubric' ? json_decode(old('rubric_json'), true) : null,
+                            'importUrl'      => null,
+                        ])
+                    </div>
+
+                    {{-- Text area --}}
                     <div id="memo_text_area" class="hidden">
                         <textarea name="memo_text" rows="6"
                             class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
@@ -137,6 +159,7 @@
                         <p class="text-xs text-gray-400 mt-1">Be as detailed as possible — include acceptable alternatives and mark allocations per question.</p>
                     </div>
 
+                    {{-- PDF area --}}
                     <div id="memo_file_area" class="hidden">
                         <div class="border-2 border-dashed border-gray-300 rounded-lg px-6 py-8 text-center hover:border-orange-400 transition-colors">
                             <svg class="w-8 h-8 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -170,6 +193,7 @@
 function toggleMemoType() {
     const val = document.querySelector('input[name="memo_type"]:checked')?.value;
     document.getElementById('memo_questions_area').classList.toggle('hidden', val !== 'questions');
+    document.getElementById('memo_rubric_area').classList.toggle('hidden', val !== 'rubric');
     document.getElementById('memo_text_area').classList.toggle('hidden', val !== 'text');
     document.getElementById('memo_file_area').classList.toggle('hidden', val !== 'pdf');
 }
@@ -182,7 +206,6 @@ function showFileName(input) {
     }
 }
 
-// Init on load
 toggleMemoType();
 </script>
 @endsection

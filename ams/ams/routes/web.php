@@ -56,6 +56,7 @@ Route::middleware('auth')->group(function () {
         Route::put('assignments/{assignment}', [AssignmentController::class, 'update'])->name('assignments.update');
         Route::delete('assignments/{assignment}', [AssignmentController::class, 'destroy'])->name('assignments.destroy');
         Route::get('assignments/{assignment}/memo', [AssignmentController::class, 'downloadMemo'])->name('assignments.memo');
+        Route::post('assignments/{assignment}/rubric/import-moodle', [AssignmentController::class, 'importRubricFromMoodle'])->name('assignments.rubric.import');
 
         // Questions (nested under assignments)
         Route::get('assignments/{assignment}/questions/create', [QuestionController::class, 'create'])->name('assignments.questions.create');

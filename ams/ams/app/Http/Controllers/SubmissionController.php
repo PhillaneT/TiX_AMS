@@ -308,8 +308,16 @@ class SubmissionController extends Controller
             strtoupper($m->module_type) . ': ' . $m->title
         )->implode(' | ');
 
-        // --- Build criteria from structured questions if available ---
+        // --- Build criteria from marking method ---
+
+        // Priority 1: per-question structured memo
         $structuredQuestions = $assignment->questions()->get();
+
+        // Priority 2: rubric criteria
+        $rubricCriteria = ($assignment->memo_type === 'rubric' && !empty($assignment->rubric_json))
+            ? $assignment->rubric_json
+            : null;
+
         if ($structuredQuestions->isNotEmpty()) {
             $criteria = $structuredQuestions->map(fn($q) => [
                 'text'      => ($q->label ? "[{$q->label}] " : '') . $q->question_text,
@@ -318,6 +326,24 @@ class SubmissionController extends Controller
                 'ai_grading_notes' => $q->ai_grading_notes,
             ])->toArray();
             $totalMarks = max(1, $structuredQuestions->sum('marks'));
+        } elseif ($rubricCriteria) {
+            $criteria = [];
+            foreach ($rubricCriteria as $rc) {
+                $maxScore = 0;
+                foreach ($rc['levels'] ?? [] as $level) {
+                    $maxScore = max($maxScore, (float) ($level['score'] ?? 0));
+                }
+                $criteria[] = [
+                    'text'      => $rc['title'] ?? 'Criterion',
+                    'max_marks' => max(1, (int) ceil($maxScore)),
+                    'expected_answer'  => $rc['description'] ?? null,
+                    'ai_grading_notes' => 'Performance levels: ' . implode(' | ', array_map(
+                        fn($l) => ($l['score'] ?? 0) . 'pts — ' . ($l['description'] ?? ''),
+                        $rc['levels'] ?? []
+                    )),
+                ];
+            }
+            $totalMarks = max(1, array_sum(array_column($criteria, 'max_marks')));
         } else {
             $memoText   = $assignment->memo_text ?? '';
             $totalMarks = max(1, (int) ($assignment->total_marks ?? 100));

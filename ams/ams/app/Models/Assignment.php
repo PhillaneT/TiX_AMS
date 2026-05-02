@@ -23,6 +23,11 @@ class Assignment extends Model
         'memo_text',
         'memo_path',
         'ai_instructions',
+        'rubric_json',
+    ];
+
+    protected $casts = [
+        'rubric_json' => 'array',
     ];
 
     public function qualification()
