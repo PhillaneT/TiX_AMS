@@ -41,8 +41,8 @@
 {{-- Sidebar --}}
 <aside class="w-64 bg-navy-900 flex flex-col fixed inset-y-0 left-0 z-40">
     {{-- Logo --}}
-    <div class="flex items-center justify-center px-4 py-4 border-b border-navy-700 bg-white">
-        <img src="/images/tix-logo.png" alt="TiX" class="h-20 object-contain">
+    <div class="flex items-center justify-center px-4 py-6 border-b border-navy-700 bg-navy-900">
+        <img src="/images/tix-logo.png" alt="TiX" class="h-16 object-contain">
     </div>
 
     {{-- Active Context Badge --}}
