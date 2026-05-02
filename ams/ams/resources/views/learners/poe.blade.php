@@ -272,6 +272,15 @@
                                            class="no-print text-xs hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
                                             Review &amp; Sign Off →
                                         </a>
+                                        <form method="POST" class="no-print"
+                                              action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}"
+                                              onsubmit="return confirm('Re-run AI marking? This will overwrite the current marking result.')">
+                                            @csrf
+                                            <button type="submit"
+                                                    class="text-xs text-blue-600 hover:text-blue-800 border border-blue-300 hover:border-blue-500 px-2 py-0.5 rounded transition">
+                                                Re-run AI Marking
+                                            </button>
+                                        </form>
                                         <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
                                                 class="no-print text-xs text-gray-400 hover:text-gray-700 border border-gray-300 px-2 py-0.5 rounded transition">
                                             Replace file

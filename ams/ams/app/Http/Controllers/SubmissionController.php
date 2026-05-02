@@ -76,7 +76,8 @@ class SubmissionController extends Controller
     public function mark(Request $request, Qualification $qualification, Cohort $cohort, Learner $learner, Submission $submission)
     {
         abort_if($submission->learner_id !== $learner->id, 404);
-        abort_if(! in_array($submission->status, ['uploaded', 'queued']), 422);
+
+        $isRemark = in_array($submission->status, ['review_required', 'signed_off', 'marking', 'queued']);
 
         $submission->update(['status' => 'marking']);
 
@@ -94,22 +95,33 @@ class SubmissionController extends Controller
             default          => 'LOW',
         };
 
-        $result = MarkingResult::create([
-            'submission_id'    => $submission->id,
-            'user_id'          => auth()->id(),
-            'ai_recommendation'=> $marking['verdict'],
-            'confidence'       => $confidence,
-            'questions_json'   => $marking['questions'],
-            'annotations_json' => [],
-            'mock_mode'        => $mockMode,
-            'assessor_override'=> false,
-            'final_verdict'    => $marking['verdict'],
-            'assessor_name'    => auth()->user()->name,
-        ]);
+        // updateOrCreate so re-marking overwrites the existing result cleanly
+        $result = MarkingResult::updateOrCreate(
+            ['submission_id' => $submission->id],
+            [
+                'user_id'          => auth()->id(),
+                'ai_recommendation'=> $marking['verdict'],
+                'confidence'       => $confidence,
+                'questions_json'   => $marking['questions'],
+                'annotations_json' => [],
+                'mock_mode'        => $mockMode,
+                'assessor_override'=> false,
+                'final_verdict'    => $marking['verdict'],
+                'assessor_name'    => auth()->user()->name,
+                // Clear any previous sign-off fields on re-mark
+                'signed_off_at'    => null,
+                'etqa_registration'=> null,
+                'assessment_provider' => null,
+                'moderation_notes' => null,
+                'cover_pdf_path'   => null,
+            ]
+        );
 
         $submission->update([
-            'status'    => 'review_required',
-            'marked_at' => now(),
+            'status'        => 'review_required',
+            'marked_at'     => now(),
+            'signed_off_at' => null,
+            'lms_pushed_at' => null,
         ]);
 
         // Log AI usage record (mock)
