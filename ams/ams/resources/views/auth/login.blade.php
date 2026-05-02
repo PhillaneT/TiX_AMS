@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In — TiXMark IQ</title>
+    <title>Sign In — TiX</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="h-full flex items-center justify-center bg-[#f5f5f0]">
 <div class="w-full max-w-sm px-4">
 
     <div class="text-center mb-8">
-        <img src="/images/tixmark-logo.png" alt="TiXMark IQ" class="h-36 mx-auto object-contain">
+        <img src="/images/tix-logo.png" alt="TiX" class="h-36 mx-auto object-contain">
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -49,7 +49,7 @@
     </div>
 
     <p class="text-center text-xs text-gray-400 mt-6">
-        TiXMark IQ &mdash; Intelligent marking you can trust
+        TiX &mdash; Intelligent marking you can trust
     </p>
 </div>
 </body>

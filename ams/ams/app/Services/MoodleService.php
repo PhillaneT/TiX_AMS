@@ -305,7 +305,7 @@ class MoodleService
                 CURLOPT_POSTFIELDS     => http_build_query($fields),
                 CURLOPT_SSL_VERIFYPEER => $verifySsl,
                 CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
-                CURLOPT_USERAGENT      => 'AjanaNova-AMS/1.0',
+                CURLOPT_USERAGENT      => 'TiX-AMS/1.0',
             ]);
 
             $result = curl_exec($ch);
@@ -330,7 +330,7 @@ class MoodleService
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_SSL_VERIFYPEER => $verifySsl,
             CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
-            CURLOPT_USERAGENT      => 'AjanaNova-AMS/1.0',
+            CURLOPT_USERAGENT      => 'TiX-AMS/1.0',
         ]);
         $result = curl_exec($ch);
         curl_close($ch);

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $cohort->name . ' — TiXMark IQ')
+@section('title', $cohort->name . ' — TiX')
 @section('heading', $cohort->name)
 @section('breadcrumbs')
     <a href="{{ route('dashboard') }}" class="hover:text-gray-800 transition-colors">Dashboard</a>

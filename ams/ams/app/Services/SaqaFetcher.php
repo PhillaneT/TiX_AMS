@@ -43,7 +43,7 @@ class SaqaFetcher
         if (!function_exists('curl_init')) {
             $ctx = stream_context_create(['http' => [
                 'timeout'    => self::FETCH_TIMEOUT,
-                'user_agent' => 'Mozilla/5.0 (AjanaNova AMS)',
+                'user_agent' => 'Mozilla/5.0 (TiX-AMS)',
             ]]);
             return @file_get_contents($url, false, $ctx);
         }
@@ -57,7 +57,7 @@ class SaqaFetcher
             CURLOPT_MAXREDIRS      => 3,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (AjanaNova AMS)',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (TiX-AMS)',
             CURLOPT_ENCODING       => '',
         ]);
         $result = curl_exec($ch);

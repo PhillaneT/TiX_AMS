@@ -583,7 +583,7 @@ class MoodlePushService
     /** Write binary content to a uniquely named temp file and return its path. */
     private function writeTempFile(string $contents, string $filename): string
     {
-        $path = sys_get_temp_dir() . '/' . uniqid('tixmark_push_') . '_' . basename($filename);
+        $path = sys_get_temp_dir() . '/' . uniqid('tix_push_') . '_' . basename($filename);
         file_put_contents($path, $contents);
         return $path;
     }
@@ -612,7 +612,7 @@ class MoodlePushService
             CURLOPT_POSTFIELDS     => $body,
             CURLOPT_SSL_VERIFYPEER => $verifySsl,
             CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
-            CURLOPT_USERAGENT      => 'TiXMarkIQ-AMS/1.0',
+            CURLOPT_USERAGENT      => 'TiX-AMS/1.0',
         ]);
 
         $raw     = curl_exec($ch);
