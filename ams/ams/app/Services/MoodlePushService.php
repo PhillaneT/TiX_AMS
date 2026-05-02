@@ -192,6 +192,14 @@ class MoodlePushService
 
         $callResult = $this->apiCall('mod_assign_save_grade', $params);
 
+        // If the call failed because the file-feedback plugin is not enabled,
+        // retry without the file attachment so the grade + feedback still push.
+        if (! $callResult['ok'] && isset($params['plugindata[assignfeedback_file_filemanager]'])) {
+            $paramsNoFile = $params;
+            unset($paramsNoFile['plugindata[assignfeedback_file_filemanager]']);
+            $callResult = $this->apiCall('mod_assign_save_grade', $paramsNoFile);
+        }
+
         if ($callResult['ok']) {
             $callResult['grading_method'] = $gradingMethod;
         }
@@ -226,7 +234,8 @@ class MoodlePushService
         if (empty($areas)) return null;
 
         $area   = $areas[0];
-        $method = $area['method'] ?? null;
+        // Moodle returns 'activemethod', not 'method'
+        $method = $area['activemethod'] ?? $area['method'] ?? null;
 
         // Only handle marking guide and rubric — everything else falls back
         if (! in_array($method, ['guide', 'rubric'], true)) return null;

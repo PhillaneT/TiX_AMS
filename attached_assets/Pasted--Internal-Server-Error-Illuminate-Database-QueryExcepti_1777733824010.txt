@@ -1,0 +1,37 @@
+
+Internal Server Error
+Illuminate\Database\QueryException
+vendor/laravel/framework/src/Illuminate/Database/Connection.php:838
+
+SQLSTATE[23514]: Check violation: 7 ERROR: new row for relation "assignments" violates check constraint "assignments_memo_type_check" DETAIL: Failing row contains (9, 1, Rubric test, null, summative, 100, rubric, null, null, 2026-05-02 13:17:17, 2026-05-02 14:56:46, null, null, 1, 2, 4, [{"id": "c_h638je0", "title": "Criterion1: Data", "levels": [{"i...). (Connection: pgsql, Host: helium, Port: 5432, Database: heliumdb, SQL: update "assignments" set "description" = ?, "memo_type" = rubric, "rubric_json" = [{"id":"c_h638je0","title":"Criterion1: Data","description":"","levels":[{"id":"l_iecaspg","score":0,"description":"No Data"},{"id":"l_re0uzmn","score":1,"description":"Some data"},{"id":"l_lle0vgj","score":2,"description":"All data"}]},{"id":"c_rnnedtl","title":"Criterion2: Transformation","description":"","levels":[{"id":"l_6gleigs","score":0,"description":"No Transformation"},{"id":"l_pm0xjkd","score":1,"description":"Some Transformation"},{"id":"l_euzu19n","score":2,"description":"All Transformation"}]},{"id":"c_ixzbdub","title":"Criterion3: Data quality","description":"","levels":[{"id":"l_3iq2svx","score":0,"description":"No Checks"},{"id":"l_4h2qdrw","score":1,"description":"Some Checks"},{"id":"l_p4xirrs","score":2,"description":"All the Checks"}]}], "updated_at" = 2026-05-02 14:56:46 where "id" = 9)
+LARAVEL 12.57.0
+PHP 8.2.23
+UNHANDLED
+CODE 23514
+500
+PUT
+https://5dcff0fb-ec1c-423d-8ccf-7c77e3301083-00-vrw3kvyqbunw.janeway.replit.dev/qualifications/1/assignments/9
+Exception trace
+9 vendor frames
+
+Illuminate\Database\Eloquent\Model->update(array)
+
+app/Http/Controllers/AssignmentController.php:122
+
+117            $rubricJson = is_array($decoded) ? $decoded : $rubricJson;
+118        } elseif ($data['memo_type'] !== 'rubric') {
+119            $rubricJson = null;
+120        }
+121
+122        $assignment->update([
+123            'name'            => $data['name'],
+124            'description'     => $data['description'] ?? null,
+125            'type'            => $data['type'],
+126            'total_marks'     => $data['total_marks'] ?? null,
+127            'memo_type'       => $data['memo_type'],
+128            'memo_text'       => $data['memo_type'] === 'text' ? ($data['memo_text'] ?? null) : null,
+129            'memo_path'       => $data['memo_type'] === 'pdf' ? $memoPath : null,
+130            'rubric_json'     => $rubricJson,
+131            'ai_instructions' => $data['ai_instructions'] ?? null,
+132        ]);
+133

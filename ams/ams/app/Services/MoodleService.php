@@ -191,6 +191,14 @@ class MoodleService
 
         $result = $this->call('mod_assign_save_grade', $params);
 
+        // If the call failed because the file-feedback plugin is not enabled on
+        // this assignment, retry without the file attachment (grade + text still push).
+        if (! $result['ok'] && isset($params['plugindata[assignfeedback_file_filemanager]'])) {
+            $paramsNoFile = $params;
+            unset($paramsNoFile['plugindata[assignfeedback_file_filemanager]']);
+            $result = $this->call('mod_assign_save_grade', $paramsNoFile);
+        }
+
         if (! $result['ok']) {
             return ['ok' => false, 'error' => $result['error']];
         }

@@ -192,6 +192,42 @@
             $totalMax     = collect($questions)->sum('max_marks');
             $totalAwarded = collect($questions)->sum('awarded');
             $pct          = $totalMax > 0 ? round($totalAwarded / $totalMax * 100) : 0;
+
+            // Rubric support: build a map of criterion index → rubric levels
+            $isRubric   = ($submission->assignment->memo_type === 'rubric');
+            $rubricMap  = [];
+            if ($isRubric && ! empty($submission->assignment->rubric_json)) {
+                // Index rubric criteria by lowercased title for fuzzy matching
+                $rubricByTitle = [];
+                foreach ($submission->assignment->rubric_json as $rc) {
+                    $rubricByTitle[strtolower(trim($rc['title'] ?? ''))] = $rc['levels'] ?? [];
+                }
+                foreach ($questions as $qi => $q) {
+                    $key = strtolower(trim($q['criterion'] ?? $q['question'] ?? ''));
+                    // strip "[LABEL] " prefix if present
+                    $key = preg_replace('/^\[[^\]]+\]\s*/', '', $key);
+                    $key = preg_replace('/^[A-Z]{2,5}-\d{2,3}-[A-Z\d.]+\s*:\s*/', '', $key);
+                    $key = trim($key);
+                    if (isset($rubricByTitle[$key])) {
+                        $rubricMap[$qi] = $rubricByTitle[$key];
+                    } else {
+                        // Partial / word-overlap match fallback
+                        foreach ($rubricByTitle as $title => $levels) {
+                            if (str_contains($key, $title) || str_contains($title, $key)) {
+                                $rubricMap[$qi] = $levels;
+                                break;
+                            }
+                        }
+                        // If still not matched, just use index order
+                        if (! isset($rubricMap[$qi])) {
+                            $rbArr = array_values($submission->assignment->rubric_json);
+                            if (isset($rbArr[$qi])) {
+                                $rubricMap[$qi] = $rbArr[$qi]['levels'] ?? [];
+                            }
+                        }
+                    }
+                }
+            }
         @endphp
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full" id="criteria-panel">
 
@@ -288,6 +324,45 @@
 
                         {{-- Marks --}}
                         <td class="px-3 pt-3 pb-2 text-center">
+                            @if($isRubric && ! empty($rubricMap[$i]))
+                            {{-- Rubric level selector --}}
+                            @php
+                                $levels = collect($rubricMap[$i])->sortBy('score')->values();
+                                $maxLvlScore = $levels->max('score') ?: 1;
+                            @endphp
+                            <div class="flex flex-col gap-1 items-stretch min-w-[7rem]">
+                                @foreach($levels as $lvl)
+                                @php
+                                    $lvlScore   = (int) ($lvl['score'] ?? 0);
+                                    $isSelected = ((int) $q['awarded']) === $lvlScore;
+                                    $lvlPct     = $lvlScore / $maxLvlScore;
+                                    $btnColour  = $isSelected
+                                        ? ($lvlPct >= 0.5 ? 'bg-green-600 text-white border-green-600' : 'bg-red-500 text-white border-red-500')
+                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
+                                @endphp
+                                <button type="button"
+                                        class="rubric-level-btn w-full text-left text-xs border rounded px-2 py-1 leading-tight transition {{ $btnColour }}"
+                                        data-idx="{{ $i }}"
+                                        data-score="{{ $lvlScore }}"
+                                        data-max="{{ $q['max_marks'] }}"
+                                        title="{{ $lvl['description'] ?? '' }}">
+                                    <span class="font-bold">{{ $lvlScore }}pts</span>
+                                    @if(! empty($lvl['description']))
+                                    <span class="block text-[10px] leading-tight opacity-80 truncate max-w-[9rem]">{{ Str::limit($lvl['description'], 40) }}</span>
+                                    @endif
+                                </button>
+                                @endforeach
+                            </div>
+                            {{-- Hidden number input keeps the existing save/dirty JS working --}}
+                            <input type="number"
+                                   id="awarded-{{ $i }}"
+                                   data-idx="{{ $i }}"
+                                   data-max="{{ $q['max_marks'] }}"
+                                   value="{{ $q['awarded'] }}"
+                                   min="0" max="{{ $q['max_marks'] }}"
+                                   class="criteria-mark sr-only">
+                            <div class="text-xs text-gray-400 mt-1">/ {{ $q['max_marks'] }}</div>
+                            @else
                             <input type="number"
                                    id="awarded-{{ $i }}"
                                    data-idx="{{ $i }}"
@@ -296,6 +371,7 @@
                                    min="0" max="{{ $q['max_marks'] }}"
                                    class="criteria-mark w-14 text-center text-sm font-bold border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-2 focus:ring-orange-300 {{ $qPct >= 0.5 ? 'text-green-700' : 'text-red-600' }}">
                             <div class="text-xs text-gray-400 mt-0.5">/ {{ $q['max_marks'] }}</div>
+                            @endif
                         </td>
                     </tr>
 
@@ -1171,6 +1247,43 @@ document.querySelectorAll('.criteria-mark').forEach(input => {
 
 document.querySelectorAll('.criteria-comment').forEach(input => {
     input.addEventListener('input', enableCriteriaSave);
+});
+
+// Rubric level buttons — clicking a level sets the hidden mark input
+document.querySelectorAll('.rubric-level-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const idx   = parseInt(btn.dataset.idx);
+        const score = parseFloat(btn.dataset.score);
+        const max   = parseFloat(btn.dataset.max);
+
+        // Update the hidden criteria-mark input
+        const inp = document.getElementById('awarded-' + idx);
+        if (inp) {
+            inp.value = score;
+            inp.dispatchEvent(new Event('input')); // triggers stamp + total updates
+        }
+
+        // Re-colour all buttons in this criterion row
+        document.querySelectorAll(`.rubric-level-btn[data-idx="${idx}"]`).forEach(b => {
+            const bScore = parseFloat(b.dataset.score);
+            const bPct   = max > 0 ? bScore / max : 0;
+            const active = bScore === score;
+            b.className = b.className
+                .replace(/bg-\S+|text-\S+|border-\S+/g, '')
+                .trim();
+            if (active) {
+                b.classList.add(
+                    bPct >= 0.5 ? 'bg-green-600' : 'bg-red-500',
+                    'text-white',
+                    bPct >= 0.5 ? 'border-green-600' : 'border-red-500'
+                );
+            } else {
+                b.classList.add('bg-white', 'text-gray-600', 'border-gray-200', 'hover:bg-gray-50');
+            }
+        });
+
+        enableCriteriaSave();
+    });
 });
 
 function enableCriteriaSave() {
