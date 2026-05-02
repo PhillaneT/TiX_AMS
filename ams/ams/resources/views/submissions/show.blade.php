@@ -89,7 +89,7 @@
     </div>
 
     {{-- ── BAR 1: STATUS — one tidy row of equal-height pills ─────── --}}
-    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/40 flex flex-wrap items-stretch gap-2">
+    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/40 flex flex-wrap items-start gap-2">
 
         {{-- Submission Status --}}
         <div class="inline-flex flex-col justify-center px-3.5 py-2 rounded-lg border-2 {{ $stBox }} min-w-[140px]">
@@ -135,9 +135,9 @@
         </div>
         @endif
 
-        {{-- Grading Rules (collapsible, same height as siblings) --}}
-        <details class="ml-auto rounded-lg border-2 {{ $hasCustomRules ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-gray-50' }} text-left grading-rules-card">
-            <summary class="px-3.5 py-2 cursor-pointer select-none list-none flex flex-col justify-center h-full">
+        {{-- Grading Rules (floating dropdown — does not affect bar layout) --}}
+        <details class="ml-auto relative grading-rules-card">
+            <summary class="px-3.5 py-2 rounded-lg border-2 {{ $hasCustomRules ? 'border-blue-300 bg-blue-50 hover:bg-blue-100' : 'border-gray-300 bg-gray-50 hover:bg-gray-100' }} cursor-pointer select-none list-none flex flex-col justify-center transition">
                 <span class="text-[10px] uppercase tracking-wide font-semibold {{ $hasCustomRules ? 'text-blue-600' : 'text-gray-500' }}">Grading Rules</span>
                 <span class="text-sm font-bold {{ $hasCustomRules ? 'text-blue-700' : 'text-gray-700' }} flex items-center gap-1 leading-tight">
                     @if($hasCustomRules)
@@ -151,7 +151,7 @@
                     </svg>
                 </span>
             </summary>
-            <div class="px-3.5 pb-3 pt-2 border-t {{ $hasCustomRules ? 'border-blue-200' : 'border-gray-200' }}" style="max-width:380px">
+            <div class="absolute right-0 top-full mt-1 w-80 z-30 rounded-lg border-2 {{ $hasCustomRules ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-white' }} shadow-lg p-3.5">
                 @if($mappedModules->isNotEmpty())
                 <div class="mb-2">
                     <span class="text-xs {{ $hasCustomRules ? 'text-blue-600' : 'text-gray-600' }} font-semibold">Module Scope: </span>
@@ -163,6 +163,7 @@
                         <span class="text-xs {{ $hasCustomRules ? 'text-blue-700' : 'text-gray-700' }}">{{ $m->title }}</span>
                     @endforeach
                 </div>
+                <hr class="my-2 {{ $hasCustomRules ? 'border-blue-200' : 'border-gray-200' }}">
                 @endif
                 @if($hasCustomRules)
                     <p class="text-[10px] uppercase tracking-wide font-semibold text-green-700 mb-1">Custom rules from assignment</p>
