@@ -326,12 +326,20 @@ class LmsSyncController extends Controller
 
             if ($existing) continue;
 
+            // Parse the Moodle full name into first / last
+            $moodleFullName = trim($moodleSub['userfullname'] ?? '');
+            $nameParts      = $moodleFullName !== ''
+                ? explode(' ', $moodleFullName, 2)
+                : ['Moodle', 'User ' . $moodleUserId];
+            $firstName = $nameParts[0];
+            $lastName  = $nameParts[1] ?? ('User ' . $moodleUserId);
+
             $learner = Learner::firstOrCreate([
                 'cohort_id'    => $cohort->id,
                 'external_ref' => 'moodle_' . $moodleUserId,
             ], [
-                'first_name' => $moodleSub['userfullname'] ?? 'Moodle',
-                'last_name'  => 'User ' . $moodleUserId,
+                'first_name' => $firstName,
+                'last_name'  => $lastName,
                 'email'      => null,
             ]);
 

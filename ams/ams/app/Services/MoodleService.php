@@ -98,33 +98,25 @@ class MoodleService
     /**
      * Fetch submissions for a specific assignment.
      */    
-        public function getSubmissions(int $assignmentId): array
-        {
-            $token = $this->integration->getApiToken();
+    public function getSubmissions(int $assignmentId): array
+    {
+        $result = $this->call('mod_assign_get_submissions', [
+            'assignmentids[0]' => $assignmentId,
+            'status'           => 'submitted',
+        ]);
 
-            $response = $this->client->post(
-                rtrim($this->integration->base_url, '/') . '/webservice/rest/server.php',
-                [
-                    'form_params' => [
-                        'wstoken' => $token,
-                        'wsfunction' => 'mod_assign_get_submissions',
-                        'moodlewsrestformat' => 'json',
-                        'assignmentids[0]' => $assignmentId,
-                    ],
-                ]
-            );
-
-            $data = json_decode($response->getBody()->getContents(), true);
-
-            if (
-                empty($data['assignments'][0]['submissions']) ||
-                ! is_array($data['assignments'][0]['submissions'])
-            ) {
-                return [];
-            }
-
-            return $data['assignments'][0]['submissions'];
+        if (! $result['ok']) {
+            throw new \RuntimeException('Moodle submission fetch failed: ' . $result['error']);
         }
+
+        $submissions = $result['data']['assignments'][0]['submissions'] ?? [];
+
+        if (! is_array($submissions)) {
+            return [];
+        }
+
+        return $submissions;
+    }
 
     /**
      * Download a submitted file and return its contents.
