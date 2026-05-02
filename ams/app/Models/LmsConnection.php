@@ -19,11 +19,13 @@ class LmsConnection extends Model
         'course_ids',
         'last_synced_at',
         'last_error',
+        'last_fetched_courses',
     ];
 
     protected $casts = [
         'course_ids'     => 'array',
         'last_synced_at' => 'datetime',
+        'last_fetched_courses' => 'array',
     ];
 
     public function user()

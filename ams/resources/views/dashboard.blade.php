@@ -134,7 +134,7 @@
                    class="text-sm font-medium text-gray-900 hover:text-orange-600 transition">
                     {{ $learner->full_name }}
                 </a>
-                <p class="text-xs text-gray-500 truncate">{{ $sub->assignment->name }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ $sub->assignment->name ?? 'Assignment unavailable' }}</p>
             </div>
             <a href="{{ $subLink }}"
                class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $badge['class'] }} hover:opacity-80 transition shrink-0">

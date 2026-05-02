@@ -147,32 +147,88 @@
         </div>
 
         {{-- Sync Modal --}}
-        <div id="sync-modal-{{ $connection->id }}" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+        <div id="sync-modal-{{ $connection->id }}"
+            class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+
             <div class="bg-white rounded-xl shadow-xl border border-gray-200 p-6 w-full max-w-md mx-4">
                 <h3 class="text-base font-semibold text-gray-900 mb-1">Sync from Moodle</h3>
-                <p class="text-sm text-gray-500 mb-4">Assignments will be imported into the selected qualification. Existing assignments already imported from this connection will be skipped.</p>
+                <p class="text-sm text-gray-500 mb-4">
+                    Assignments will be imported into the selected qualification.
+                    Existing assignments already imported from this connection will be skipped.
+                </p>
 
                 <form method="POST" action="{{ route('integrations.sync', $connection) }}">
                     @csrf
+
+                    @php
+                        // ✅ THIS is the source of truth
+                        $courses = $connection->last_fetched_courses ?? [];
+                    @endphp
+
+                    {{-- Qualification selection --}}
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Import into Qualification</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Import into Qualification
+                        </label>
+
                         <select name="qualification_id" required
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
+                                    focus:outline-none focus:ring-2 focus:ring-orange-400">
                             <option value="">— select qualification —</option>
                             @foreach(\App\Models\Qualification::orderBy('name')->get() as $qual)
-                                <option value="{{ $qual->id }}">{{ $qual->name }}</option>
+                                <option value="{{ $qual->id }}">
+                                    {{ $qual->name }}
+                                </option>
                             @endforeach
                         </select>
                     </div>
 
+                    {{-- ✅ Moodle course selection --}}
+                    @if(!empty($courses))
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Select Moodle Courses to Import
+                            </label>
+
+                            <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 space-y-2">
+                                @foreach($courses as $course)
+                                    <label class="flex items-start gap-2 text-sm text-gray-700">
+                                        <input
+                                            type="checkbox"
+                                            name="course_ids[]"
+                                            value="{{ $course['id'] }}"
+                                            class="mt-1 rounded border-gray-300
+                                                text-brand-600 focus:ring-brand-500">
+                                        <span>
+                                            {{ $course['fullname']
+                                                ?? $course['shortname']
+                                                ?? 'Course '.$course['id'] }}
+                                            <span class="text-xs text-gray-500 block">
+                                                Moodle ID: {{ $course['id'] }}
+                                            </span>
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+                    @else
+                        <p class="text-sm text-gray-500 mb-4">
+                            No Moodle courses fetched yet. Click “Fetch Courses” first.
+                        </p>
+                    @endif
+
                     <div class="flex gap-3 justify-end">
                         <button type="button"
-                                onclick="document.getElementById('sync-modal-{{ $connection->id }}').classList.add('hidden')"
-                                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg transition">
+                                onclick="document.getElementById('sync-modal-{{ $connection->id }}')
+                                        .classList.add('hidden')"
+                                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900
+                                    border border-gray-200 rounded-lg transition">
                             Cancel
                         </button>
+
                         <button type="submit"
-                                class="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition">
+                                class="px-4 py-2 text-sm font-semibold text-white
+                                    bg-brand-600 hover:bg-brand-700 rounded-lg transition">
                             Start Sync
                         </button>
                     </div>
