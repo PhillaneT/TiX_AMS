@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/ajananova/db" VERSION="20260330" COMMENT="XMLDB file for local/ajananova"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd">
+  <TABLES>
+
+    <!--
+        ajananova_ai_usage
+        One row per AI marking event triggered.
+        Tracks token consumption, billing status, and mock/real mode.
+    -->
+    <TABLE NAME="ajananova_ai_usage" COMMENT="Records every AI marking event for billing and audit">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="licence_key"     TYPE="char" LENGTH="64" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="sdp_id"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="assessor_id"     TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="learner_id"      TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="assignment_id"   TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="tokens_input"    TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="tokens_output"   TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="credits_charged" TYPE="int"  LENGTH="5"  NOTNULL="true"  SEQUENCE="false" DEFAULT="1"/>
+        <FIELD NAME="mock_mode"       TYPE="int"  LENGTH="1"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="status"          TYPE="char" LENGTH="20" NOTNULL="true"  SEQUENCE="false" DEFAULT="success"/>
+        <FIELD NAME="api_response_id" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"     TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="licence_key"   UNIQUE="false" FIELDS="licence_key"/>
+        <INDEX NAME="assessor_id"   UNIQUE="false" FIELDS="assessor_id"/>
+        <INDEX NAME="assignment_id" UNIQUE="false" FIELDS="assignment_id"/>
+        <INDEX NAME="timecreated"   UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
+
+    <!--
+        ajananova_marking_results
+        One row per marked submission.
+        Stores the full AI JSON verdict and tracks assessor review/override.
+    -->
+    <TABLE NAME="ajananova_marking_results" COMMENT="Stores AI marking output and assessor review outcome per submission">
+      <FIELDS>
+        <FIELD NAME="id"                   TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="usage_id"             TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="submission_id"        TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="ai_recommendation"    TYPE="char" LENGTH="30" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="ai_confidence"        TYPE="char" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="questions_json"       TYPE="text"             NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="moderation_notes"     TYPE="text"             NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="assessor_override"    TYPE="int"  LENGTH="1"  NOTNULL="true"  SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="final_verdict"        TYPE="char" LENGTH="30" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="assessor_id"          TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="annotated_pdf_fileid" TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="timereviewed"         TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"       TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_usage_id"   TYPE="foreign" FIELDS="usage_id"      REFTABLE="ajananova_ai_usage"       REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="submission_id" UNIQUE="false" FIELDS="submission_id"/>
+        <INDEX NAME="assessor_id"   UNIQUE="false" FIELDS="assessor_id"/>
+      </INDEXES>
+    </TABLE>
+
+    <!--
+        ajananova_client_credits
+        One row per licence key.
+        Tracks running credit balance; reset_date drives monthly replenishment.
+    -->
+    <TABLE NAME="ajananova_client_credits" COMMENT="Tracks AI marking credit balance per client licence key">
+      <FIELDS>
+        <FIELD NAME="id"                TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="licence_key"       TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="credits_total"     TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="credits_used"      TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="credits_remaining" TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="reset_date"        TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timeupdated"       TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="licence_key" UNIQUE="true" FIELDS="licence_key"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>

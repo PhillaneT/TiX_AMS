@@ -1,0 +1,39 @@
+~/workspace$ git remote set-url origin "https://x-access-token:${GitHub_API_KEY}@github.com/PhillaneT/TiX_AMS.git"
+git fetch origin main
+git merge --no-ff -X ours FETCH_HEAD -m "Merge origin/main into local main"
+git push origin main
+From https://github.com/PhillaneT/TiX_AMS
+ * branch            main       -> FETCH_HEAD
+   35c4db8..762366d  main       -> origin/main
+Performing inexact rename detection: 100% (181839/181839), done.
+Auto-merging .replit
+Auto-merging ams/ams/app/Http/Controllers/LmsSyncController.php
+Auto-merging ams/ams/app/Http/Controllers/SubmissionController.php
+Auto-merging ams/ams/app/Models/Assignment.php
+Auto-merging ams/ams/app/Services/MoodlePushService.php
+CONFLICT (rename/delete): ams/app/Services/MoodleService.php renamed to ams/ams/app/Services/MoodleService.php in 762366d57bb6789f6164d9a38efbb49555a6498b, but deleted in HEAD.
+Auto-merging ams/ams/app/Services/MoodleService.php
+Auto-merging ams/ams/app/Services/Pdf/AssessorDeclarationGenerator.php
+CONFLICT (rename/delete): ams/database/seeders/AssessorSeeder.php renamed to ams/ams/database/seeders/AssessorSeeder.php in 762366d57bb6789f6164d9a38efbb49555a6498b, but deleted in HEAD.
+Auto-merging ams/ams/database/seeders/AssessorSeeder.php
+CONFLICT (rename/delete): ams/database/seeders/DatabaseSeeder.php renamed to ams/ams/database/seeders/DatabaseSeeder.php in 762366d57bb6789f6164d9a38efbb49555a6498b, but deleted in HEAD.
+Auto-merging ams/ams/database/seeders/DatabaseSeeder.php
+Auto-merging ams/ams/resources/views/auth/login.blade.php
+Auto-merging ams/ams/resources/views/layouts/app.blade.php
+CONFLICT (rename/delete): ams/resources/views/learners/poe.blade.php renamed to ams/ams/resources/views/learners/poe.blade.php in 762366d57bb6789f6164d9a38efbb49555a6498b, but deleted in HEAD.
+Auto-merging ams/ams/resources/views/learners/poe.blade.php
+Auto-merging ams/ams/resources/views/submissions/show.blade.php
+Auto-merging ams/ams/routes/web.php
+CONFLICT (rename/delete): ams/resources/views/submissions/show.blade.php renamed to ams/storage/framework/views/db2ba5a21526dda884bd8dfe3c2077d6.php in 762366d57bb6789f6164d9a38efbb49555a6498b, but deleted in HEAD.
+CONFLICT (modify/delete): ams/storage/framework/views/db2ba5a21526dda884bd8dfe3c2077d6.php deleted in HEAD and modified in 762366d57bb6789f6164d9a38efbb49555a6498b.  Version 762366d57bb6789f6164d9a38efbb49555a6498b of ams/storage/framework/views/db2ba5a21526dda884bd8dfe3c2077d6.php left in tree.
+Auto-merging replit.md
+Auto-merging scripts/post-merge.sh
+Automatic merge failed; fix conflicts and then commit the result.
+To https://github.com/PhillaneT/TiX_AMS.git
+ ! [rejected]        main -> main (non-fast-forward)
+error: failed to push some refs to 'https://github.com/PhillaneT/TiX_AMS.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. If you want to integrate the remote changes,
+hint: use 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+~/workspace$ 

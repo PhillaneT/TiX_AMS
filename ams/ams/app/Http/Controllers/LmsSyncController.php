@@ -77,10 +77,11 @@ class LmsSyncController extends Controller
 
             if ($existing) {
                 $assignmentsSkipped++;
-                // Always keep cmid up-to-date (may have been missing on first import)
-                if ($moodleCmid && $existing->lms_cmid !== $moodleCmid) {
-                    $existing->update(['lms_cmid' => $moodleCmid]);
-                }
+                // Always keep cmid + course id up-to-date (may have been missing on first import)
+                $updates = [];
+                if ($moodleCmid     && $existing->lms_cmid      !== $moodleCmid)     $updates['lms_cmid']      = $moodleCmid;
+                if ($moodleCourseId && $existing->lms_course_id !== $moodleCourseId) $updates['lms_course_id'] = $moodleCourseId;
+                if ($updates) $existing->update($updates);
                 $assignment = $existing;
             } else {
                 $assignment = Assignment::create([
@@ -88,6 +89,7 @@ class LmsSyncController extends Controller
                     'lms_connection_id' => $integration->id,
                     'lms_assignment_id' => $moodleAssignId,
                     'lms_cmid'          => $moodleCmid ?: null,
+                    'lms_course_id'     => $moodleCourseId ?: null,
                     'name'              => $moodleAssignment['name'] ?? ('Moodle Assignment ' . $moodleAssignId),
                     'description'       => strip_tags($moodleAssignment['intro'] ?? ''),
                     'type'              => 'summative',
@@ -237,12 +239,39 @@ class LmsSyncController extends Controller
 
         if (! $pushResult['ok']) {
             $integration->update(['last_error' => $pushResult['error']]);
+            $submission->update([
+                'lms_last_push_error'         => $pushResult['error'],
+                'lms_grade_pushed_at'         => null,
+                'lms_feedback_text_pushed_at' => null,
+                'lms_feedback_file_pushed_at' => null,
+            ]);
 
             return redirect()->back()->with('error', 'Push to Moodle failed: ' . $pushResult['error']);
         }
 
-        $submission->update(['lms_pushed_at' => now()]);
+        $now = now();
+        $submission->update([
+            'lms_pushed_at'               => $now,
+            'lms_grade_pushed_at'         => ($pushResult['grade_pushed']         ?? false) ? $now : null,
+            'lms_feedback_text_pushed_at' => ($pushResult['feedback_text_pushed'] ?? false) ? $now : null,
+            'lms_feedback_file_pushed_at' => ($pushResult['feedback_file_pushed'] ?? false) ? $now : null,
+            'lms_last_push_error'         => null,
+        ]);
         $integration->update(['last_error' => null]);
+
+        // If we tried to attach a PDF but Moodle silently rejected it, surface that.
+        if (($pushResult['pdf_attempted'] ?? false) && ! ($pushResult['feedback_file_pushed'] ?? false)) {
+            // Refresh the assignment's pre-flight so the warnings show up alongside the next attempt.
+            try {
+                $preflight = (new MoodleService($integration))->preflightAssignment($submission->assignment);
+                $submission->assignment->update([
+                    'lms_preflight_json'       => $preflight,
+                    'lms_preflight_checked_at' => now(),
+                ]);
+            } catch (\Throwable) {
+                // Non-fatal — the user can run a manual pre-flight from /admin/lms.
+            }
+        }
 
         AuditLog::record('lms.submission.pushed', $submission, [
             'connection_id'    => $integration->id,
@@ -251,10 +280,14 @@ class LmsSyncController extends Controller
             'push_method'      => $pushResult['method'] ?? 'unknown',
         ]);
 
-        $method  = $pushResult['method'] ?? 'simple';
-        $message = str_starts_with($method, 'advanced_')
+        $method   = $pushResult['method'] ?? 'simple';
+        $base     = str_starts_with($method, 'advanced_')
             ? 'Grade, criterion scores, and feedback pushed to Moodle (advanced grading).'
             : 'Grade and feedback pushed to Moodle successfully.';
+        $message  = $base;
+        if (($pushResult['pdf_attempted'] ?? false) && ! ($pushResult['feedback_file_pushed'] ?? false)) {
+            $message .= ' Note: the annotated PDF was NOT attached — Moodle\'s "Feedback files" plugin is disabled on this assignment. Enable it in Moodle and re-push.';
+        }
 
         $redirect = redirect()->back()->with('success', $message);
 
@@ -430,14 +463,16 @@ class LmsSyncController extends Controller
 
     /**
      * Resolve the best available PDF to attach when pushing back to Moodle.
-     * Priority: annotated graded PDF → cover letter PDF → original submission (if PDF).
+     * Priority: combined Declaration + Marked PDF (cover_pdf_path) → bare annotated
+     * PDF → original submission (if PDF). The combined file is the learner-facing
+     * deliverable, so it's also what should land in Moodle.
      * Returns [string|null $contents, string|null $filename].
      */
     private function resolveGradedPdf(Submission $submission, $result): array
     {
         $candidates = [
-            [$result->annotated_pdf_path ?? null, 'graded_' . basename($submission->original_filename)],
             [$result->cover_pdf_path ?? null,     'feedback_' . basename($submission->original_filename)],
+            [$result->annotated_pdf_path ?? null, 'graded_'   . basename($submission->original_filename)],
         ];
 
         foreach ($candidates as [$path, $name]) {

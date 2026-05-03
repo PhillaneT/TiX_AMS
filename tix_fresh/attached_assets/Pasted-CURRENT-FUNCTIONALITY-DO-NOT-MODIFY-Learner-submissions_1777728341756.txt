@@ -1,0 +1,76 @@
+CURRENT FUNCTIONALITY (DO NOT MODIFY):
+- Learner submissions are synced from Moodle
+- AI-assisted grading with assessor manual override
+- Preview pane of original submission
+- Manual ticks and crosses
+- Annotated learner submission PDF generation
+- Combined marking report PDF (criteria, marks, feedback, assessor declaration)
+- Final grade + verdict stored internally
+
+WHAT IS NOT DONE YET:
+- Grades, feedback, and PDFs are NOT pushed back to Moodle
+
+TARGET LMS:
+- Moodle version 4.5.7
+- I have full admin access and a Moodle Web Services token
+- Assignments use:
+  - Advanced grading (Rubric or Marking Guide)
+  - OR simple numeric grading as fallback
+
+GOAL (IMPLEMENT TODAY):
+Add Moodle REST API push-back so that when an assessor clicks
+“Finalize / Return to Learner”, Moodle receives:
+
+1. ✅ Final numeric grade
+2. ✅ Overall assessor feedback (text)
+3. ✅ Criterion-level scores & comments (IF advanced grading is enabled)
+4. ✅ Annotated learner submission PDF attached as feedback
+5. ✅ Assignment submission marked as GRADED
+
+STRICT RULES:
+- Do NOT refactor or rewrite existing grading logic
+- Do NOT alter PDF generation
+- Do NOT change UI or assessor workflows
+- ONLY add a Moodle integration layer
+- Keep all changes isolated and reversible
+
+ASSUMPTIONS:
+- I already store:
+  - Moodle course_id
+  - assignment_id
+  - user_id
+  - submission_id
+- Annotated PDFs already exist on disk or in Laravel storage
+
+WHAT YOU MUST PRODUCE:
+1. ✅ Exact Moodle REST API functions required
+2. ✅ Request payload structures
+3. ✅ Laravel service classes (not controllers) for:
+   - Pushing grades
+   - Uploading feedback files
+   - Sending rubric / marking guide results
+4. ✅ A single orchestration method:
+   pushToMoodle(Submission $submission)
+5. ✅ Clear error handling and retry guidance
+
+WHAT YOU MUST NOT DO:
+- Do NOT explain Moodle basics
+- Do NOT propose LTI (this task is REST API only)
+- Do NOT change database schemas unless absolutely required
+- Do NOT auto-apply changes to unrelated files
+
+DELIVERABLE FORMAT:
+- Step-by-step implementation
+- PHP/Laravel code snippets
+- Service-layer focus
+- Comments explaining intent, not basics
+
+SUCCESS CRITERIA:
+After implementation, a learner in Moodle can see:
+- Assignment marked as graded
+- Correct grade
+- Assessor feedback
+- Annotated submission PDF available in feedback files
+
+If information is missing, make safe assumptions and proceed.
+Priority is working integration today, not perfection.

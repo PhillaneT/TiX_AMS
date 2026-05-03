@@ -15,6 +15,9 @@ class Assignment extends Model
         'lms_connection_id',
         'lms_assignment_id',
         'lms_cmid',
+        'lms_course_id',
+        'lms_preflight_json',
+        'lms_preflight_checked_at',
         'name',
         'description',
         'type',
@@ -27,8 +30,15 @@ class Assignment extends Model
     ];
 
     protected $casts = [
-        'rubric_json' => 'array',
+        'rubric_json'              => 'array',
+        'lms_preflight_json'       => 'array',
+        'lms_preflight_checked_at' => 'datetime',
     ];
+
+    public function lmsConnection()
+    {
+        return $this->belongsTo(LmsConnection::class, 'lms_connection_id');
+    }
 
     public function qualification()
     {

@@ -7,6 +7,7 @@ use App\Models\Cohort;
 use App\Models\Learner;
 use App\Models\Qualification;
 use App\Models\Submission;
+use App\Services\Pdf\TrackingDocumentGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -123,13 +124,17 @@ class LearnerController extends Controller
     public function poe(Qualification $qualification, Cohort $cohort, Learner $learner)
     {
         abort_if($learner->cohort_id !== $cohort->id, 404);
+        [$modules, $moduleStatuses] = $this->buildPoeMatrix($qualification, $learner);
+        AuditLog::record('learner.poe_viewed', $learner, ['qualification_id' => $qualification->id]);
+        return view('learners.poe', compact('qualification', 'cohort', 'learner', 'modules', 'moduleStatuses'));
+    }
 
-        // Load all modules for this qualification with their assignments
+    private function buildPoeMatrix(Qualification $qualification, Learner $learner): array
+    {
         $modules = $qualification->modules()
             ->with(['assignments' => fn($q) => $q->withCount('submissions')])
             ->get();
 
-        // Load all of this learner's submissions for this qualification's assignments
         $assignmentIds = $qualification->assignments()->pluck('id');
         $submissionsByAssignment = Submission::with('markingResult')
             ->where('learner_id', $learner->id)
@@ -137,7 +142,6 @@ class LearnerController extends Controller
             ->get()
             ->keyBy('assignment_id');
 
-        // Build per-module status
         $moduleStatuses = [];
         foreach ($modules as $mod) {
             $assignedAssignments = $mod->assignments;
@@ -196,11 +200,99 @@ class LearnerController extends Controller
             ];
         }
 
-        AuditLog::record('learner.poe_viewed', $learner, ['qualification_id' => $qualification->id]);
+        return [$modules, $moduleStatuses];
+    }
 
-        return view('learners.poe', compact(
-            'qualification', 'cohort', 'learner', 'modules', 'moduleStatuses'
-        ));
+    public function poePdf(Qualification $qualification, Cohort $cohort, Learner $learner, TrackingDocumentGenerator $gen)
+    {
+        abort_if($learner->cohort_id !== $cohort->id, 404);
+
+        [$modules, $moduleStatuses] = $this->buildPoeMatrix($qualification, $learner);
+        $assessor = auth()->user();
+
+        // Shape modules for the generator
+        $modulesPayload = [];
+        foreach ($modules as $mod) {
+            $st = $moduleStatuses[$mod->id] ?? ['status' => 'unmapped', 'label' => '—', 'assignments' => []];
+            $activities = [];
+            foreach ($st['assignments'] as $item) {
+                $asgn = $item['assignment'];
+                $sub  = $item['submission'];
+                $mr   = $sub?->markingResult;
+                $grade = null; $percent = null;
+                if ($mr) {
+                    $score = 0; $max = 0;
+                    foreach ((array) ($mr->questions_json ?? []) as $q) {
+                        $score += (float) ($q['awarded']   ?? $q['score']     ?? 0);
+                        $max   += (float) ($q['max_marks'] ?? $q['max_score'] ?? $q['max'] ?? 0);
+                    }
+                    if ($max <= 0) { $max = (float) ($asgn->total_marks ?? 0); }
+                    // Scale the rubric score to the assignment's stated total when they differ
+                    // (e.g. one criterion out of 100 → assignment is out of 11)
+                    if ($max > 0 && $asgn->total_marks > 0 && (float)$asgn->total_marks !== $max) {
+                        $score = $score * ((float)$asgn->total_marks / $max);
+                        $max   = (float) $asgn->total_marks;
+                    }
+                    if ($max > 0) {
+                        $fmt = fn($n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
+                        $grade   = $fmt($score) . '/' . $fmt($max);
+                        $percent = round(($score / $max) * 100, 1);
+                    }
+                }
+                $activities[] = [
+                    'name'    => $asgn->name,
+                    'grade'   => $grade,
+                    'percent' => $percent,
+                    'result'  => $item['verdict'],
+                ];
+            }
+            $modulesPayload[] = [
+                'code'         => $mod->module_code,
+                'type'         => $mod->module_type,
+                'title'        => $mod->title,
+                'nqf_level'    => $mod->nqf_level ? ('L' . ltrim((string)$mod->nqf_level, 'L')) : '—',
+                'credits'      => $mod->credits,
+                'activities'   => $activities,
+                'status'       => $st['status'],
+                'status_label' => $st['label'],
+            ];
+        }
+
+        $path = $gen->generate([
+            'qualification' => [
+                'name'      => $qualification->name,
+                'saqa_id'   => $qualification->saqa_id,
+                'nqf_level' => $qualification->nqf_level,
+                'credits'   => $qualification->credits,
+            ],
+            'learner' => [
+                'full_name'  => $learner->full_name ?: '—',
+                'student_no' => $learner->external_ref ?: ('#' . $learner->id),
+            ],
+            'modules'           => $modulesPayload,
+            'date'              => now(),
+            'assessor_name'     => $assessor?->name ?? '',
+            'etqa_registration' => $assessor?->etqa_registration ?? '',
+            'signature_path'    => $assessor?->signature_path ?? null,
+            'stamp_path'        => $assessor?->stamp_path ?? null,
+            'stamp_generated'   => ($assessor && $assessor->stamp_use_generated) ? [
+                'org_top'           => $assessor->stamp_org_top ?? '',
+                'org_bottom'        => $assessor->stamp_org_bottom ?? '',
+                'role'              => $assessor->stamp_role ?? '',
+                'holder_name'       => $assessor->stamp_holder_name ?? '',
+                'etqa_registration' => $assessor->etqa_registration ?? '',
+            ] : null,
+        ]);
+
+        AuditLog::record('learner.poe_pdf_exported', $learner, ['qualification_id' => $qualification->id]);
+
+        $filename = 'CompetencyTracking_' . preg_replace('/[^A-Za-z0-9_-]/', '_',
+            ($learner->external_ref ?: $learner->id) . '_' . ($qualification->saqa_id ?: $qualification->id)) . '.pdf';
+
+        return response()->file($path, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $filename . '"',
+        ])->deleteFileAfterSend(true);
     }
 
     public function destroy(Qualification $qualification, Cohort $cohort, Learner $learner)

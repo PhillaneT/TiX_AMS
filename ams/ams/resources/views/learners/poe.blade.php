@@ -79,9 +79,14 @@
     </div>
 
     <div class="mt-4 pt-4 border-t border-gray-100 flex gap-3">
+        <a href="{{ route('qualifications.cohorts.learners.poe.pdf', [$qualification, $cohort, $learner]) }}"
+           target="_blank"
+           class="no-print text-xs bg-[#e3b64d] hover:bg-[#cfa23e] text-white font-semibold px-4 py-1.5 rounded-lg transition">
+            Download Tracking PDF
+        </a>
         <button onclick="window.print()"
                 class="no-print text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded-lg transition">
-            Print / Export PDF
+            Print this page
         </button>
         <span class="text-xs text-gray-400 self-center">Generated: {{ now()->format('d M Y H:i') }}</span>
     </div>
@@ -171,194 +176,141 @@
                             <div class="space-y-3">
                             @foreach($modStatus['assignments'] as $item)
                             @php
-                                $asgn      = $item['assignment'];
-                                $sub       = $item['submission'];
-                                $verdict   = $item['verdict'];
-                                $subStatus = $item['submission_status'];
-                                $uploadId  = 'upload-form-' . $asgn->id;
+                                $asgn         = $item['assignment'];
+                                $sub          = $item['submission'];
+                                $verdict      = $item['verdict'];
+                                $subStatus    = $item['submission_status'];
+                                $uploadFormId = 'upload-form-' . $asgn->id;
+                                $typeBadge = $asgn->type === 'formative'
+                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                    : 'bg-purple-50 text-purple-700 border border-purple-200';
+                                $stateBadge = $stateLabel = null;
+                                if ($subStatus === 'uploaded') {
+                                    $stateBadge = 'bg-gray-100 text-gray-700 border border-gray-200';
+                                    $stateLabel = 'Awaiting AI marking';
+                                } elseif (in_array($subStatus, ['review_required','marking','queued']) && $sub) {
+                                    $b = $sub->statusBadge();
+                                    $stateBadge = $b['class'];
+                                    $stateLabel = $b['label'];
+                                } elseif ($subStatus === 'signed_off') {
+                                    $stateBadge = $verdict === 'COMPETENT'
+                                        ? 'bg-green-50 text-green-700 border border-green-200'
+                                        : 'bg-red-50 text-red-700 border border-red-200';
+                                    $stateLabel = $verdict === 'COMPETENT' ? '✓ Competent' : '✗ Not Yet Competent';
+                                }
                             @endphp
-                            <div class="border border-gray-200 rounded-lg p-2.5 bg-white">
-                                {{-- Assignment name + meta --}}
-                                <div class="flex items-center gap-2 mb-2 flex-wrap">
-                                    <span class="text-xs font-semibold text-gray-800">{{ $asgn->name }}</span>
-                                    <span class="text-xs px-1.5 py-0.5 rounded
-                                        {{ $asgn->type === 'formative' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600' }}">
-                                        {{ ucfirst($asgn->type) }}
-                                    </span>
-                                    <span class="text-xs text-gray-400">{{ $asgn->total_marks }} marks</span>
-                                    @if($asgn->lms_connection_id)
-                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
-                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                        Moodle
-                                    </span>
-                                    @endif
+                            <div class="border border-gray-200 rounded-lg bg-white overflow-hidden">
+                                {{-- Two-column layout: INFO left, ACTIONS right --}}
+                                <div class="flex items-stretch">
+                                    {{-- INFO column --}}
+                                    <div class="flex-1 min-w-0 p-3 pr-2">
+                                        <div class="text-sm font-semibold text-gray-800 leading-snug">{{ $asgn->name }}</div>
+                                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                            <span class="text-[11px] px-1.5 py-0.5 rounded {{ $typeBadge }}">{{ ucfirst($asgn->type) }}</span>
+                                            <span class="text-[11px] text-gray-500">{{ $asgn->total_marks }} marks</span>
+                                            @if($asgn->lms_connection_id)
+                                                <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">Moodle</span>
+                                            @endif
+                                            @if($sub && $sub->isFromMoodle())
+                                                <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">From Moodle</span>
+                                            @endif
+                                            @if($stateLabel)
+                                                <span class="text-[11px] px-2 py-0.5 rounded-full font-medium {{ $stateBadge }}">{{ $stateLabel }}</span>
+                                            @endif
+                                            @if($sub && $sub->markingResult && in_array($subStatus, ['review_required','marking','queued']))
+                                                <span class="text-[11px] font-semibold
+                                                    {{ $sub->markingResult->ai_recommendation === 'COMPETENT' ? 'text-green-700' : 'text-red-700' }}">
+                                                    AI: {{ $sub->markingResult->ai_recommendation === 'COMPETENT' ? 'Competent' : 'NYC' }} ({{ $sub->markingResult->confidence }})
+                                                </span>
+                                            @endif
+                                            @if($subStatus === 'signed_off' && $sub?->signed_off_at)
+                                                <span class="text-[11px] text-gray-400">signed {{ $sub->signed_off_at->format('d M Y') }}</span>
+                                            @endif
+                                        </div>
+                                        @if($sub && $sub->original_filename)
+                                            <div class="mt-1.5 flex items-center gap-1 text-[11px] text-gray-500 truncate">
+                                                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                <span class="truncate">{{ $sub->original_filename }}</span>
+                                            </div>
+                                        @elseif(! $sub)
+                                            <div class="mt-1.5 text-[11px] text-gray-400 italic">No submission yet</div>
+                                        @endif
+                                    </div>
+
+                                    {{-- ACTIONS column --}}
+                                    <div class="no-print shrink-0 border-l border-gray-100 bg-gray-50/60 p-3 flex flex-col gap-1.5 min-w-[140px]">
+                                        @if(! $sub)
+                                            <button type="button" onclick="toggleUpload('{{ $uploadFormId }}')"
+                                                    class="text-xs bg-[#e3b64d] hover:bg-[#cfa23e] text-white font-semibold px-3 py-1.5 rounded transition">
+                                                Upload
+                                            </button>
+                                        @elseif($subStatus === 'uploaded')
+                                            <form method="POST" action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}">
+                                                @csrf
+                                                <button type="submit" class="w-full text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded transition">Run AI Marking</button>
+                                            </form>
+                                            <form method="POST" action="{{ route('qualifications.cohorts.learners.submissions.destroy', [$qualification, $cohort, $learner, $sub]) }}" onsubmit="return confirm('Delete this submission?')">
+                                                @csrf @method('DELETE')
+                                                <button type="submit" class="w-full text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition">Remove</button>
+                                            </form>
+                                        @elseif(in_array($subStatus, ['review_required','marking','queued']))
+                                            <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
+                                               class="text-xs bg-[#e3b64d] hover:bg-[#cfa23e] text-white text-center font-semibold px-3 py-1.5 rounded transition">Review &amp; Sign Off →</a>
+                                            <form method="POST" action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}" onsubmit="return confirm('Re-run AI marking? This will overwrite the current marking result.')">
+                                                @csrf
+                                                <button type="submit" class="w-full text-[11px] text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded transition">Re-run AI</button>
+                                            </form>
+                                            <button type="button" onclick="toggleUpload('{{ $uploadFormId }}')"
+                                                    class="w-full text-[11px] text-gray-500 hover:bg-gray-100 border border-gray-200 px-2 py-1 rounded transition">Replace file</button>
+                                        @elseif($subStatus === 'signed_off')
+                                            <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
+                                               class="text-xs bg-white hover:bg-gray-100 text-gray-700 text-center font-semibold border border-gray-300 px-3 py-1.5 rounded transition">View</a>
+                                            <form method="POST" action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}" onsubmit="return confirm('Re-run AI marking? This will clear the sign-off and overwrite the current marking result.')">
+                                                @csrf
+                                                <button type="submit" class="w-full text-[11px] text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded transition">Re-run AI</button>
+                                            </form>
+                                            <button type="button" onclick="toggleUpload('{{ $uploadFormId }}')"
+                                                    class="w-full text-[11px] text-gray-500 hover:bg-gray-100 border border-gray-200 px-2 py-1 rounded transition">Re-submit</button>
+                                        @else
+                                            <span class="text-xs text-gray-400 self-center">{{ ucfirst(str_replace('_', ' ', $subStatus ?? '')) }}</span>
+                                        @endif
+                                    </div>
                                 </div>
 
-                                {{-- === No submission === --}}
-                                @if(! $sub)
-                                    <div class="flex items-center gap-2 no-print">
-                                        <span class="text-xs text-gray-400">No submission yet</span>
-                                        <button type="button"
-                                                onclick="toggleUpload('{{ $uploadId }}')"
-                                                class="text-xs hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
-                                            Upload Submission
-                                        </button>
-                                    </div>
-                                    <div id="{{ $uploadId }}" class="hidden mt-2 no-print">
-                                        <form method="POST" enctype="multipart/form-data"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.store', [$qualification, $cohort, $learner]) }}">
-                                            @csrf
-                                            <input type="hidden" name="assignment_id" value="{{ $asgn->id }}">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <input type="file" name="submission_file" required
-                                                       accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.zip,.odt"
-                                                       class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 flex-1 min-w-0">
-                                                <button type="submit"
-                                                        class="text-xs bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1 rounded transition shrink-0">
-                                                    Upload
-                                                </button>
-                                                <button type="button" onclick="toggleUpload('{{ $uploadId }}')"
-                                                        class="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
-                                            </div>
-                                            <p class="mt-1 text-xs text-gray-400">PDF, Word, TXT, image or ZIP — max 20 MB</p>
-                                        </form>
-                                    </div>
-
-                                {{-- === Uploaded, awaiting AI marking === --}}
-                                @elseif($subStatus === 'uploaded')
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
-                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                            {{ $sub->original_filename }}
-                                        </span>
-                                        @if($sub->isFromMoodle())
-                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
-                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                            From Moodle
-                                        </span>
-                                        @endif
-                                        <form method="POST" class="no-print"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}">
-                                            @csrf
-                                            <button type="submit"
-                                                    class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1 rounded transition">
-                                                Run AI Marking
-                                            </button>
-                                        </form>
-                                        <form method="POST" class="no-print"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.destroy', [$qualification, $cohort, $learner, $sub]) }}"
-                                              onsubmit="return confirm('Delete this submission?')">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" class="text-xs text-red-400 hover:text-red-600">Remove</button>
-                                        </form>
-                                    </div>
-
-                                {{-- === Marked / awaiting sign-off === --}}
-                                @elseif(in_array($subStatus, ['review_required', 'marking', 'queued']))
+                                {{-- Inline upload/replace/resubmit form (hidden by default) --}}
+                                <div id="{{ $uploadFormId }}" class="hidden border-t border-gray-100 bg-gray-50 p-3 no-print">
                                     @php
-                                        $badge     = $sub->statusBadge();
-                                        $replaceId = 'replace-form-' . $asgn->id;
+                                        $isResubmit = $subStatus === 'signed_off';
+                                        $isReplace  = in_array($subStatus, ['review_required','marking','queued']);
+                                        $btnCls   = $isResubmit ? 'bg-red-600 hover:bg-red-700' : ($isReplace ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700');
+                                        $btnLabel = $isResubmit ? 'Re-submit & Reopen' : ($isReplace ? 'Replace' : 'Upload');
                                     @endphp
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ $badge['class'] }}">{{ $badge['label'] }}</span>
-                                        @if($sub->markingResult)
-                                            <span class="text-xs font-semibold
-                                                {{ $sub->markingResult->ai_recommendation === 'COMPETENT' ? 'text-green-700' : 'text-red-700' }}">
-                                                AI: {{ $sub->markingResult->ai_recommendation === 'COMPETENT' ? 'Competent' : 'NYC' }}
-                                                ({{ $sub->markingResult->confidence }})
-                                            </span>
-                                        @endif
-                                        <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
-                                           class="no-print text-xs hover:bg-[#e3b64d] hover:text-[#1e3a5f] bg-[#e3b64d] text-white font-semibold px-3 py-1 rounded transition">
-                                            Review &amp; Sign Off →
-                                        </a>
-                                        <form method="POST" class="no-print"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}"
-                                              onsubmit="return confirm('Re-run AI marking? This will overwrite the current marking result.')">
-                                            @csrf
-                                            <button type="submit"
-                                                    class="text-xs text-blue-600 hover:text-blue-800 border border-blue-300 hover:border-blue-500 px-2 py-0.5 rounded transition">
-                                                Re-run AI Marking
-                                            </button>
-                                        </form>
-                                        <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
-                                                class="no-print text-xs text-gray-400 hover:text-gray-700 border border-gray-300 px-2 py-0.5 rounded transition">
-                                            Replace file
-                                        </button>
-                                    </div>
-                                    {{-- Re-upload form (hidden by default) --}}
-                                    <div id="{{ $replaceId }}" class="hidden mt-2 no-print">
-                                        <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-1.5">
-                                            Replacing will delete the current submission and marking result. You will need to run AI Marking again.
-                                        </div>
-                                        <form method="POST" enctype="multipart/form-data"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.store', [$qualification, $cohort, $learner]) }}">
-                                            @csrf
-                                            <input type="hidden" name="assignment_id" value="{{ $asgn->id }}">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <input type="file" name="submission_file" required
-                                                       accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.zip,.odt"
-                                                       class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 flex-1 min-w-0">
-                                                <button type="submit"
-                                                        class="text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold px-3 py-1 rounded transition shrink-0">
-                                                    Replace
-                                                </button>
-                                                <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
-                                                        class="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
-                                            </div>
-                                        </form>
-                                    </div>
-
-                                {{-- === Signed off === --}}
-                                @elseif($subStatus === 'signed_off')
-                                    @php $replaceId = 'replace-signed-' . $asgn->id; @endphp
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <span class="text-xs font-bold {{ $verdict === 'COMPETENT' ? 'text-green-700' : 'text-red-700' }}">
-                                            {{ $verdict === 'COMPETENT' ? '✓ COMPETENT' : '✗ NOT YET COMPETENT' }}
-                                        </span>
-                                        <span class="text-xs text-gray-400">signed {{ $sub->signed_off_at?->format('d M Y') }}</span>
-                                        <a href="{{ route('qualifications.cohorts.learners.submissions.show', [$qualification, $cohort, $learner, $sub]) }}"
-                                           class="no-print text-xs text-blue-600 hover:underline">View</a>
-                                        <form method="POST" class="no-print"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.mark', [$qualification, $cohort, $learner, $sub]) }}"
-                                              onsubmit="return confirm('Re-run AI marking? This will clear the sign-off and overwrite the current marking result.')">
-                                            @csrf
-                                            <button type="submit"
-                                                    class="text-xs text-blue-600 hover:text-blue-800 border border-blue-300 hover:border-blue-500 px-2 py-0.5 rounded transition">
-                                                Re-run AI Marking
-                                            </button>
-                                        </form>
-                                        <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
-                                                class="no-print text-xs text-gray-400 hover:text-gray-700 border border-gray-300 px-2 py-0.5 rounded transition">
-                                            Re-submit
-                                        </button>
-                                    </div>
-                                    {{-- Re-upload form for signed-off (hidden by default) --}}
-                                    <div id="{{ $replaceId }}" class="hidden mt-2 no-print">
-                                        <div class="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mb-1.5">
+                                    @if($isResubmit)
+                                        <div class="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
                                             This will reopen the signed-off result and require re-marking. Use only for genuine resubmissions.
                                         </div>
-                                        <form method="POST" enctype="multipart/form-data"
-                                              action="{{ route('qualifications.cohorts.learners.submissions.store', [$qualification, $cohort, $learner]) }}">
-                                            @csrf
-                                            <input type="hidden" name="assignment_id" value="{{ $asgn->id }}">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <input type="file" name="submission_file" required
-                                                       accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.zip,.odt"
-                                                       class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 flex-1 min-w-0">
-                                                <button type="submit"
-                                                        class="text-xs bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-1 rounded transition shrink-0">
-                                                    Re-submit &amp; Reopen
-                                                </button>
-                                                <button type="button" onclick="toggleUpload('{{ $replaceId }}')"
-                                                        class="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                @else
-                                    <span class="text-xs text-gray-400">{{ ucfirst(str_replace('_', ' ', $subStatus ?? '')) }}</span>
-                                @endif
-
+                                    @elseif($isReplace)
+                                        <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                                            Replacing will delete the current submission and marking result. You will need to run AI Marking again.
+                                        </div>
+                                    @endif
+                                    <form method="POST" enctype="multipart/form-data"
+                                          action="{{ route('qualifications.cohorts.learners.submissions.store', [$qualification, $cohort, $learner]) }}">
+                                        @csrf
+                                        <input type="hidden" name="assignment_id" value="{{ $asgn->id }}">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <input type="file" name="submission_file" required
+                                                   accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.zip,.odt"
+                                                   class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 flex-1 min-w-0">
+                                            <button type="submit" class="text-xs {{ $btnCls }} text-white font-semibold px-3 py-1 rounded transition shrink-0">
+                                                {{ $btnLabel }}
+                                            </button>
+                                            <button type="button" onclick="toggleUpload('{{ $uploadFormId }}')"
+                                                    class="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
+                                        </div>
+                                        <p class="mt-1 text-[11px] text-gray-400">PDF, Word, TXT, image or ZIP — max 20 MB</p>
+                                    </form>
+                                </div>
                             </div>{{-- /assignment card --}}
                             @endforeach
                             </div>

@@ -79,6 +79,93 @@ The "Push to Moodle" action on a signed-off submission is currently **incomplete
 4. Add a "push status" indicator on the AMS submission row that reflects which parts of
    the push succeeded (grade ✓ / rubric ✗ / PDF ✓) instead of a single boolean.
 
+### Session 6 additions (2026-05-02) — Billing & Credits, Phase A ✅
+
+First slice of the billing system. **No PayFast yet** — Phase A is just the
+data model, signup, trial credits, AI-mark enforcement, and an admin
+"grant credits" button so the flow can be exercised end-to-end before
+payments are wired up. Plan doc: `ams/ams/docs/BILLING_PLAN.md`.
+
+> **Next session pickup:** Phase A is shipped and verified. Open
+> `ams/ams/docs/BILLING_PLAN.md` §0 ("⏭ Next session — start here") for
+> Phase B (PayFast sandbox subscriptions) — first concrete step is to
+> request the three `PAYFAST_*` secrets via the Replit secrets workflow.
+
+**New tables:**
+- `plans` — subscription/top-up product catalogue (`code`, `name`, `kind`,
+  `price_cents`, `monthly_credits`, `topup_credits`, `is_active`).
+- `billing_accounts` — one per assessor (solo) today, ready for team mode
+  later. Holds `name`, `type` (solo/team), `owner_user_id`, `plan_code`,
+  `status` (trialing/active/past_due/cancelled), `balance` (denormalised
+  current credit total), trial-grant timestamp, billing details.
+- `credit_ledger` — append-only history of every balance change. Signed
+  `delta`, `reason` (trial/subscription_grant/topup/ai_mark/admin_adjust/
+  refund), polymorphic `reference_type`+`reference_id`, `balance_after`,
+  who made the change.
+- `users.billing_account_id` (nullable FK) and `users.is_admin` (bool).
+- `ai_usage.billing_account_id` (nullable FK) so AI usage rows can be
+  rolled up per account.
+
+**New models:** `Plan`, `BillingAccount`, `CreditLedger`. Updated `User`
+(adds `billing_account_id`, `is_admin` cast, `billingAccount()` relation)
+and `AiUsage` (adds `billing_account_id` + relation).
+
+**New service:** `app/Services/Billing/BillingService.php` — single source
+of truth for balance changes. Every `grant()` and `deduct()` is wrapped
+in a DB transaction with `lockForUpdate()` so concurrent marks can't
+double-spend. `deduct()` throws `InsufficientCreditsException` when the
+balance is short. `createSoloAccountForUser()` is the convenience used
+by signup + seeders to spin up a brand-new account with trial credits.
+
+**New controllers:**
+- `Auth\RegisterController` — self-service signup. Creates a user, spins
+  up a solo billing account, grants 3 trial AI marks, logs them in,
+  drops them on `/billing`.
+- `BillingController` — `/billing` (read-only dashboard: balance, plan,
+  last 20 ledger entries) and `/billing/topup` (out-of-credits screen
+  with PayFast placeholders for Phase B/C).
+- `AdminController` — gated by new `EnsureAdmin` middleware. Lists every
+  billing account with current balance and a per-row "Grant credits"
+  form (audited via `billing.admin_grant`).
+
+**New middleware:** `app/Http/Middleware/EnsureAdmin.php`.
+
+**New routes:**
+- `GET /register`, `POST /register` (in `guest` group)
+- `GET /billing`, `GET /billing/topup` (in `auth` group)
+- `GET /admin/accounts`, `POST /admin/accounts/{account}/grant`
+  (in `auth` + `EnsureAdmin` group)
+
+**Updated views:**
+- `layouts/app.blade.php` — sidebar now shows a Billing link with a
+  credit-balance pill (red when ≤ 3) and an "Admin · Accounts" link
+  when the current user `is_admin`.
+- `auth/login.blade.php` — "Create an account" link to the new register
+  page.
+
+**Enforcement:** `SubmissionController@mark` now resolves the assessor's
+billing account, calls `BillingService::deduct(account, 1, REASON_AI_MARK,
+$submission)` *before* running the (still-mock) marking, and on
+`InsufficientCreditsException` redirects to `/billing/topup` with a
+flash message that makes it clear manual marking still works. The
+`ai_usage` row that gets logged afterwards now records
+`credits_charged = 1` and `billing_account_id`.
+
+**Seeders:** `PlansSeeder` inserts `portal_only` (R199/m, 10 marks) and
+`topup_25` (R99 once-off, 25 marks). `AssessorSeeder` flags the seeded
+assessor as admin and back-fills a billing account with 3 trial
+credits. `DatabaseSeeder` runs Plans → Assessor and then back-fills a
+solo account for any other pre-existing user without one.
+
+**Audit log events added:** `user.registered`, `billing.admin_grant`.
+
+**Phase A acceptance (verified):** seed creates assessor with 3 credits;
+register flow lands a new user on `/billing` with 3 credits; AI mark
+deducts 1; with balance 0 the mark redirects to `/billing/topup` with
+the out-of-credits message; admin grant from `/admin/accounts` updates
+balance and writes a `billing.admin_grant` audit row. PayFast checkout,
+recurring monthly grants, and PDF invoices are Phases B + C.
+
 ### Session 5 additions (2026-04-27) — Moodle LMS Integration & Sync
 
 **New migrations:**

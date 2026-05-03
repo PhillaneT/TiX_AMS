@@ -13,6 +13,7 @@ class AiUsage extends Model
     protected $fillable = [
         'submission_id',
         'user_id',
+        'billing_account_id',
         'tokens_input',
         'tokens_output',
         'credits_charged',
@@ -34,5 +35,10 @@ class AiUsage extends Model
     public function assessor()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function billingAccount()
+    {
+        return $this->belongsTo(BillingAccount::class);
     }
 }

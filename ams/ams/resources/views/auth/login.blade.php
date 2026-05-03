@@ -46,6 +46,11 @@
                 Sign in
             </button>
         </form>
+
+        <p class="text-center text-xs text-gray-500 mt-6">
+            New to TiX?
+            <a href="{{ route('register') }}" class="text-orange-600 hover:underline font-medium">Create an account</a>
+        </p>
     </div>
 
     <p class="text-center text-xs text-gray-400 mt-6">

@@ -2,13 +2,19 @@
 
 use App\Models\LmsConnection;
 use App\Http\Controllers\ActiveContextController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AdminLmsController;
+use App\Models\Assignment;
 use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LearnerController;
 use App\Http\Controllers\LmsConnectionController;
 use App\Http\Controllers\LmsSyncController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QualificationController;
 use App\Http\Controllers\QualificationModuleController;
 use App\Http\Controllers\QuestionController;
@@ -20,6 +26,11 @@ Route::bind('integration', fn ($id) => LmsConnection::findOrFail($id));
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [LoginController::class, 'login']);
+
+    Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
+    Route::post('/register', [RegisterController::class, 'register'])
+        ->middleware('throttle:5,1'); // 5 attempts per minute per IP — trial credits have monetary value
+
 });
 
 Route::middleware('auth')->get('/api/saqa-lookup', [QualificationModuleController::class, 'lookupJson'])
@@ -30,6 +41,12 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/context', [ActiveContextController::class, 'update'])->name('context.update');
+
+    // Per-assessor signature + official stamp profile (reused on every PDF).
+    Route::get('/profile',                [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile',                [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('/profile/asset/{kind}',   [ProfileController::class, 'asset'])
+        ->whereIn('kind', ['signature', 'stamp'])->name('profile.asset');
 
     Route::resource('qualifications', QualificationController::class);
 
@@ -83,7 +100,8 @@ Route::middleware('auth')->group(function () {
             Route::get('learners/import', [LearnerController::class, 'importForm'])->name('learners.import');
             Route::post('learners/import', [LearnerController::class, 'import'])->name('learners.import.store');
             Route::delete('learners/{learner}', [LearnerController::class, 'destroy'])->name('learners.destroy');
-            Route::get('learners/{learner}/poe', [LearnerController::class, 'poe'])->name('learners.poe');
+            Route::get('learners/{learner}/poe',     [LearnerController::class, 'poe'])->name('learners.poe');
+            Route::get('learners/{learner}/poe/pdf', [LearnerController::class, 'poePdf'])->name('learners.poe.pdf');
 
             // Submissions (per learner)
             Route::prefix('learners/{learner}')->name('learners.')->group(function () {
@@ -112,6 +130,29 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('learners/template', [LearnerController::class, 'downloadTemplate'])->name('learners.template');
+
+    // Billing & credits (Phase A — read-only + top-up placeholder)
+    Route::prefix('billing')->name('billing.')->group(function () {
+        Route::get('/',      [BillingController::class, 'index'])->name('index');
+        Route::get('/topup', [BillingController::class, 'topup'])->name('topup');
+    });
+
+    // Admin section (gated by EnsureAdmin)
+    Route::middleware(\App\Http\Middleware\EnsureAdmin::class)
+        ->prefix('admin')->name('admin.')->group(function () {
+            Route::get('/accounts', [AdminController::class, 'accounts'])->name('accounts');
+            Route::post('/accounts/{account}/grant', [AdminController::class, 'grantCredits'])
+                ->name('accounts.grant');
+
+            // LMS diagnostics + pre-flight
+            Route::get('/lms', [AdminLmsController::class, 'index'])->name('lms');
+            Route::post('/lms/{integration}/diagnose', [AdminLmsController::class, 'diagnose'])
+                ->name('lms.diagnose');
+            Route::post('/lms/{integration}/preflight-all', [AdminLmsController::class, 'preflightAll'])
+                ->name('lms.preflight-all');
+            Route::post('/lms/assignment/{assignment}/preflight', [AdminLmsController::class, 'preflight'])
+                ->name('lms.preflight');
+        });
 
     // LMS Integrations
     Route::prefix('integrations')->name('integrations.')->group(function () {

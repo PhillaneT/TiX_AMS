@@ -24,6 +24,10 @@ class Submission extends Model
         'signed_off_at',
         'emailed_at',
         'lms_pushed_at',
+        'lms_grade_pushed_at',
+        'lms_feedback_text_pushed_at',
+        'lms_feedback_file_pushed_at',
+        'lms_last_push_error',
     ];
 
     protected $casts = [
@@ -32,6 +36,9 @@ class Submission extends Model
         'signed_off_at' => 'datetime',
         'emailed_at'    => 'datetime',
         'lms_pushed_at' => 'datetime',
+        'lms_grade_pushed_at'         => 'datetime',
+        'lms_feedback_text_pushed_at' => 'datetime',
+        'lms_feedback_file_pushed_at' => 'datetime',
     ];
 
     public function assignment()

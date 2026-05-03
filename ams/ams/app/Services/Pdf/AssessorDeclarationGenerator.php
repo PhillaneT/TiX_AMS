@@ -527,9 +527,245 @@ class AssessorDeclarationGenerator
         ), true, false, true, false, '');
 
         $pdf->Ln(6);
+
+        // ── Assessor sign-off block (signature + ETQA + stamp) ──────────────
+        $this->drawAssessorSignOff($pdf, $d);
+
         $pdf->SetFont('dejavusans', 'I', 7);
         $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetY(285);
         $pdf->Cell(0, 5, 'CONFIDENTIAL — For assessment and moderation purposes only.', 0, 1, 'C');
+    }
+
+    /**
+     * Compact sign-off block for the bottom of the Marking Report:
+     * Assessor name + ETQA registration on the left, signature image over a
+     * line in the middle, official stamp on the right.  Falls back to plain
+     * underlines when the assessor has not yet uploaded a signature/stamp.
+     */
+    public function drawAssessorSignOff(\setasign\Fpdi\Tcpdf\Fpdi $pdf, array $d): void
+    {
+        $y       = $pdf->GetY();
+        // Keep the block on the same page as the totals — push to bottom area
+        // if there's already very little room left.
+        if ($y > 240) { $pdf->AddPage(); $y = 25; }
+
+        $lm = 20;
+        $w  = 170;
+
+        $pdf->SetDrawColorArray(self::BORDER);
+        $pdf->SetLineWidth(0.2);
+        $pdf->Line($lm, $y, $lm + $w, $y);
+        $y += 4;
+
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetFont('dejavusans', 'B', 8);
+        $pdf->SetXY($lm, $y);
+        $pdf->Cell($w, 5, 'ASSESSOR SIGN-OFF', 0, 1, 'L');
+        $y += 6;
+
+        $colW   = $w / 3;
+        $rowH   = 22;
+        $labelY = $y + $rowH - 4;
+
+        // ── Left: Name + ETQA ────────────────────────────────────────────────
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->SetFont('dejavusans', '', 9);
+        $pdf->SetXY($lm, $y);
+        $pdf->Cell($colW - 4, 5, $d['assessor_name'] ?? '', 0, 2, 'L');
+        if (! empty($d['etqa_registration'])) {
+            $pdf->SetFont('dejavusans', 'I', 8);
+            $pdf->SetTextColorArray(self::GRAY);
+            $pdf->Cell($colW - 4, 4, 'ETQA: ' . $d['etqa_registration'], 0, 1, 'L');
+        }
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetFont('dejavusans', 'I', 7);
+        $pdf->SetXY($lm, $labelY);
+        $pdf->Cell($colW - 4, 4, 'Assessor', 0, 0, 'L');
+
+        // ── Middle: Signature ────────────────────────────────────────────────
+        $sigX  = $lm + $colW;
+        $sigW  = $colW - 4;
+        $sigBl = $y + $rowH - 7;
+
+        $pdf->SetDrawColorArray(self::BORDER);
+        $pdf->Line($sigX, $sigBl, $sigX + $sigW, $sigBl);
+
+        $sigPath = $d['signature_path'] ?? null;
+        if ($sigPath && is_file($sigPath)) {
+            try {
+                $pdf->Image($sigPath, $sigX, $y, 0, $rowH - 9,
+                    '', '', '', false, 300, '', false, false, 0, 'LM');
+            } catch (\Throwable $e) { /* leave blank line */ }
+        }
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetFont('dejavusans', 'I', 7);
+        $pdf->SetXY($sigX, $labelY);
+        $pdf->Cell($sigW, 4, 'Signature', 0, 0, 'L');
+
+        // ── Right: Stamp ─────────────────────────────────────────────────────
+        $stX  = $lm + 2 * $colW;
+        $stW  = $colW - 4;
+        $stH  = $rowH - 4;
+        $pdf->SetDrawColorArray(self::BORDER);
+        $pdf->SetLineStyle(['width' => 0.25, 'dash' => '2,2']);
+        $pdf->Rect($stX, $y, $stW, $stH, 'D');
+        $pdf->SetLineStyle(['width' => 0.2, 'dash' => '']);
+
+        $stampGen  = $d['stamp_generated'] ?? null;
+        $stampPath = $d['stamp_path'] ?? null;
+        $dateStr   = is_string($d['date'] ?? '') ? $d['date']
+                   : (($d['date'] ?? null) ? $d['date']->format('d F Y') : date('d F Y'));
+
+        if (is_array($stampGen) && ($stampGen['holder_name'] ?? '') !== '') {
+            // Fit a square stamp inside the (slightly wider) box.
+            $sz = min($stW, $stH) - 1;
+            $sx = $stX + ($stW - $sz) / 2;
+            $sy = $y   + ($stH - $sz) / 2;
+            $this->drawRubberStamp($pdf, $sx + $sz / 2, $sy + $sz / 2, $sz / 2 - 1, $stampGen, $dateStr);
+        } elseif ($stampPath && is_file($stampPath)) {
+            try {
+                $pdf->Image($stampPath, $stX + 1.5, $y + 1.5, $stW - 3, $stH - 3,
+                    '', '', '', false, 300, '', false, false, 0, 'CM');
+            } catch (\Throwable $e) {
+                $pdf->SetTextColorArray(self::GRAY);
+                $pdf->SetFont('dejavusans', 'I', 7);
+                $pdf->SetXY($stX, $y + $stH / 2 - 2);
+                $pdf->Cell($stW, 4, 'Official Stamp', 0, 0, 'C');
+            }
+        } else {
+            $pdf->SetTextColorArray(self::GRAY);
+            $pdf->SetFont('dejavusans', 'I', 7);
+            $pdf->SetXY($stX, $y + $stH / 2 - 2);
+            $pdf->Cell($stW, 4, 'Official Stamp', 0, 0, 'C');
+        }
+    }
+
+    /**
+     * Dashed-box "Official Stamp" placeholder (used when no stamp asset exists).
+     */
+    public function drawStampPlaceholder(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $x, float $y, float $w, float $h): void
+    {
+        $pdf->SetDrawColorArray(self::BORDER);
+        $pdf->SetLineStyle(['width' => 0.3, 'dash' => '3,2']);
+        $pdf->Rect($x, $y, $w, $h, 'D');
+        $pdf->SetLineStyle(['width' => 0.2, 'dash' => '']);
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetFont('dejavusans', 'I', 8);
+        $pdf->SetXY($x, $y + $h / 2 - 3);
+        $pdf->Cell($w, 6, 'Official Stamp', 0, 0, 'C');
+    }
+
+    /**
+     * Draw a vintage circular rubber stamp at ($cx, $cy) with outer radius $R.
+     * Two concentric red rings, curved top + bottom text, centre block with the
+     * role label, the dynamic date (large), holder name and ETQA. Slightly
+     * tilted (-7°) for an old-school "thumped on" look.
+     *
+     * $stamp keys: org_top, org_bottom, role, holder_name, etqa_registration
+     */
+    public function drawRubberStamp(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $cx, float $cy, float $R, array $stamp, string $dateStr): void
+    {
+        $RED = [168, 29, 29];
+        $r   = $R - 2.3;
+
+        $pdf->StartTransform();
+        $pdf->Rotate(-7, $cx, $cy);
+
+        // Two concentric rings
+        $pdf->SetDrawColorArray($RED);
+        $pdf->SetLineWidth(0.9);
+        $pdf->Circle($cx, $cy, $R);
+        $pdf->SetLineWidth(0.45);
+        $pdf->Circle($cx, $cy, $r);
+
+        // Arc text
+        $arcR = ($R + $r) / 2;
+        $this->drawArcText($pdf, $cx, $cy, $arcR, (string)($stamp['org_top']    ?? ''), 200, false, $arcR > 18 ? 4.0 : 3.4, $RED);
+        $this->drawArcText($pdf, $cx, $cy, $arcR, (string)($stamp['org_bottom'] ?? ''), 200, true,  $arcR > 18 ? 4.0 : 3.4, $RED);
+
+        // Centre block — divider lines around the date for that classic look.
+        $cw = $r - 3;
+        $pdf->SetLineWidth(0.3);
+        $pdf->Line($cx - $cw, $cy - 2.6, $cx + $cw, $cy - 2.6);
+        $pdf->Line($cx - $cw, $cy + 3.6, $cx + $cw, $cy + 3.6);
+
+        $pdf->SetTextColorArray($RED);
+        $pdf->SetFont('helvetica', 'B', 5.5);
+        $pdf->SetXY($cx - $cw, $cy - 8);
+        $pdf->Cell($cw * 2, 3, mb_strtoupper((string)($stamp['role'] ?? 'ASSESSOR')), 0, 0, 'C');
+
+        $pdf->SetFont('helvetica', 'B', 8.5);
+        $pdf->SetXY($cx - $cw, $cy - 1.6);
+        $pdf->Cell($cw * 2, 5, mb_strtoupper($dateStr), 0, 0, 'C');
+
+        $pdf->SetFont('helvetica', 'B', 6.2);
+        $pdf->SetXY($cx - $cw, $cy + 4);
+        $pdf->Cell($cw * 2, 3, (string)($stamp['holder_name'] ?? ''), 0, 0, 'C');
+
+        if (! empty($stamp['etqa_registration'])) {
+            $pdf->SetFont('helvetica', '', 5.2);
+            $pdf->SetXY($cx - $cw, $cy + 7.5);
+            $pdf->Cell($cw * 2, 3, 'ETQA: ' . $stamp['etqa_registration'], 0, 0, 'C');
+        }
+
+        $pdf->StopTransform();
+        // Reset
+        $pdf->SetDrawColorArray([0, 0, 0]);
+        $pdf->SetTextColorArray(self::BLACK);
+        $pdf->SetLineWidth(0.2);
+    }
+
+    /**
+     * Draw text along a circular arc.  $arcDeg is the total span in degrees.
+     * When $bottom is true, the text sits along the bottom of the circle and
+     * reads upright (feet-toward-centre); otherwise it sits along the top.
+     */
+    private function drawArcText(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $cx, float $cy, float $r, string $text, float $arcDeg, bool $bottom, float $fontSize, array $color): void
+    {
+        $text = mb_strtoupper(trim($text));
+        if ($text === '') return;
+
+        // Because angle increases clockwise from the top, walking the bottom
+        // arc from (180 − padDeg/2) → (180 + padDeg/2) goes right-to-left in
+        // screen space.  Reverse the string so it reads left-to-right to a
+        // viewer looking at the stamp.
+        if ($bottom) {
+            $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
+            $text  = implode('', array_reverse($chars));
+        }
+
+        $pdf->SetFont('helvetica', 'B', $fontSize);
+        $pdf->SetTextColorArray($color);
+
+        $len = mb_strlen($text);
+        // Width-aware spread so longer words don't overlap
+        $totalW   = 0; $widths = [];
+        for ($i = 0; $i < $len; $i++) {
+            $widths[$i] = $pdf->GetStringWidth(mb_substr($text, $i, 1));
+            $totalW += $widths[$i];
+        }
+        $padDeg     = min($arcDeg, max(20.0, ($totalW / max($r, 1)) * (180 / M_PI) + 12));
+        $startA     = $bottom ? (180 - $padDeg / 2) : (-$padDeg / 2);
+        $perCharDeg = $padDeg / max($len, 1);
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch  = mb_substr($text, $i, 1);
+            $a   = $startA + $perCharDeg * ($i + 0.5);
+            $rad = deg2rad($a);
+            $x   = $cx + $r * sin($rad);
+            $y   = $cy - $r * cos($rad);
+            // TCPDF Rotate is CCW in PDF coords (which is CW in screen y-down).
+            // Top arc: characters tangent, "up" radially outward → rotate by  a (degrees).
+            // Bottom arc: characters with feet inward, readable upright       → rotate by  a + 180.
+            $rot = $bottom ? ($a + 180) : $a;
+            $cw  = $widths[$i];
+
+            $pdf->StartTransform();
+            $pdf->Rotate(-$rot, $x, $y);
+            $pdf->Text($x - $cw / 2, $y - $fontSize * 0.5, $ch);
+            $pdf->StopTransform();
+        }
     }
 
     /**
@@ -635,40 +871,99 @@ class AssessorDeclarationGenerator
 
         $y += 16;
 
-        // ── Signature lines ─────────────────────────────────────────────────────
+        // ── Sign-off zone: facts (left) + signature box (centre) + stamp (right) ─
+        // Redesigned layout — gives signature a dedicated 90×26mm box and the
+        // stamp a square 55×55mm zone where a circular rubber stamp fits well.
         $pdf->SetTextColorArray(self::BLACK);
         $pdf->SetFont('dejavusans', '', 9);
         $dateStr = is_string($d['date']) ? $d['date'] : ($d['date'] ? $d['date']->format('d F Y') : date('d F Y'));
 
-        $lines = [
-            ['Name',              $d['assessor_name']     ?? ''],
-            ['ETQA Registration', $d['etqa_registration'] ?? ''],
-            ['Date',              $dateStr],
-            ['Signature',         ''],
-        ];
+        $factsW   = 60;
+        $sigW     = 50;
+        $stampSz  = 55;
+        $gap      = 5;
+        // facts (60) + gap + sig (50) + gap + stamp (55) = 175 (just over 170 — tighten)
+        // Re-balance so total = 170 exactly:
+        $factsW = 58; $sigW = 50; $stampSz = 52; $gap = 5;
 
-        foreach ($lines as [$label, $value]) {
-            $pdf->SetXY($lm, $y);
-            $pdf->SetFont('dejavusans', 'B', 9);
-            $pdf->Cell(42, 7, $label . ':', 0, 0, 'L');
-            $pdf->SetFont('dejavusans', '', 9);
-            $pdf->Cell($w - 42, 7, $value, 'B', 1, 'L');
-            $y += 10;
+        $factsX = $lm;
+        $sigX   = $lm + $factsW + $gap;
+        $stampX = $sigX + $sigW + $gap;
+
+        // Facts column
+        $factsRows = [
+            ['Name',  $d['assessor_name']     ?? ''],
+            ['ETQA',  $d['etqa_registration'] ?? ''],
+            ['Date',  $dateStr],
+        ];
+        $cy = $y;
+        foreach ($factsRows as [$label, $value]) {
+            $pdf->SetFont('dejavusans', 'B', 8);
+            $pdf->SetTextColorArray(self::GRAY);
+            $pdf->SetXY($factsX, $cy);
+            $pdf->Cell($factsW, 4, strtoupper($label), 0, 1, 'L');
+            $pdf->SetFont('dejavusans', '', 9.5);
+            $pdf->SetTextColorArray(self::BLACK);
+            $pdf->SetXY($factsX, $cy + 4);
+            $pdf->Cell($factsW, 5, $value !== '' ? $value : '—', 0, 1, 'L');
+            $cy += 12;
         }
 
-        $y += 4;
-
-        // ── Official Stamp box ──────────────────────────────────────────────────
-        $stampW = 60;
-        $stampH = 35;
+        // Signature box
+        $sigH = 30;
         $pdf->SetDrawColorArray(self::BORDER);
-        $pdf->SetLineStyle(['width' => 0.3, 'dash' => '3,2']);
-        $pdf->Rect($lm, $y, $stampW, $stampH, 'D');
-        $pdf->SetLineStyle(['width' => 0.2, 'dash' => '']);
+        $pdf->SetLineStyle(['width' => 0.3, 'dash' => '']);
+        $pdf->RoundedRect($sigX, $y, $sigW, $sigH, 1.5, '1111', 'D');
+
+        // baseline inside the box
+        $sigBl = $y + $sigH - 6;
+        $pdf->SetLineStyle(['width' => 0.4, 'dash' => '']);
+        $pdf->Line($sigX + 4, $sigBl, $sigX + $sigW - 4, $sigBl);
+
+        $sigPath = $d['signature_path'] ?? null;
+        if ($sigPath && is_file($sigPath)) {
+            try {
+                // Centred horizontally inside the box, sitting just above the baseline.
+                $imgH = 18;
+                $pdf->Image($sigPath, $sigX + 3, $y + 3, $sigW - 6, $imgH,
+                    '', '', '', false, 300, '', false, false, 0, 'CB');
+            } catch (\Throwable $e) { /* leave blank */ }
+        }
+        // Caption
+        $pdf->SetFont('dejavusans', 'B', 7);
         $pdf->SetTextColorArray(self::GRAY);
-        $pdf->SetFont('dejavusans', 'I', 8);
-        $pdf->SetXY($lm, $y + $stampH / 2 - 3);
-        $pdf->Cell($stampW, 6, 'Official Stamp', 0, 0, 'C');
+        $pdf->SetXY($sigX, $y + $sigH + 0.5);
+        $pdf->Cell($sigW, 4, 'SIGNATURE', 0, 0, 'C');
+
+        // Stamp zone (square)
+        $stampGen  = $d['stamp_generated'] ?? null;
+        $stampPath = $d['stamp_path']     ?? null;
+
+        if (is_array($stampGen) && ($stampGen['holder_name'] ?? '') !== '') {
+            $this->drawRubberStamp(
+                $pdf,
+                $stampX + $stampSz / 2,
+                $y + $stampSz / 2,
+                $stampSz / 2 - 1,
+                $stampGen,
+                $dateStr
+            );
+        } elseif ($stampPath && is_file($stampPath)) {
+            try {
+                $pdf->Image($stampPath, $stampX + 1.5, $y + 1.5, $stampSz - 3, $stampSz - 3,
+                    '', '', '', false, 300, '', false, false, 0, 'CM');
+            } catch (\Throwable $e) {
+                $this->drawStampPlaceholder($pdf, $stampX, $y, $stampSz, $stampSz);
+            }
+        } else {
+            $this->drawStampPlaceholder($pdf, $stampX, $y, $stampSz, $stampSz);
+        }
+        $pdf->SetFont('dejavusans', 'B', 7);
+        $pdf->SetTextColorArray(self::GRAY);
+        $pdf->SetXY($stampX, $y + $stampSz + 0.5);
+        $pdf->Cell($stampSz, 4, 'OFFICIAL STAMP', 0, 0, 'C');
+
+        $y += $sigH + 8;
 
         // ── Footer ──────────────────────────────────────────────────────────────
         $pdf->SetTextColorArray(self::GRAY);

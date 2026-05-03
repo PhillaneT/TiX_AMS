@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InsufficientCreditsException;
 use App\Models\AiUsage;
 use App\Models\AuditLog;
+use App\Models\BillingAccount;
 use App\Models\Cohort;
 use App\Models\Learner;
 use App\Models\MarkingResult;
 use App\Models\Qualification;
 use App\Models\Submission;
+use App\Services\Billing\BillingService;
 use App\Services\Pdf\Annotator;
 use App\Services\Pdf\AssessorDeclarationGenerator;
 use Illuminate\Http\Request;
@@ -73,9 +76,34 @@ class SubmissionController extends Controller
     // -------------------------------------------------------
     // Run AI marking (mock mode by default)
     // -------------------------------------------------------
-    public function mark(Request $request, Qualification $qualification, Cohort $cohort, Learner $learner, Submission $submission)
+    public function mark(Request $request, Qualification $qualification, Cohort $cohort, Learner $learner, Submission $submission, BillingService $billing)
     {
         abort_if($submission->learner_id !== $learner->id, 404);
+
+        // ── Credit check & deduction (single source of truth for billing) ───
+        $user = $request->user();
+        $account = $user?->billing_account_id
+            ? BillingAccount::find($user->billing_account_id)
+            : null;
+
+        if (! $account) {
+            return back()->with('error',
+                'No billing account is linked to your user. Please contact support.');
+        }
+
+        try {
+            $billing->deduct(
+                $account,
+                1,
+                BillingService::REASON_AI_MARK,
+                $submission,
+            );
+        } catch (InsufficientCreditsException $e) {
+            return redirect()
+                ->route('billing.topup')
+                ->with('error',
+                    'You\'re out of AI marks. Top up or upgrade to keep using AI marking. Manual marking still works.');
+        }
 
         $isRemark = in_array($submission->status, ['review_required', 'signed_off', 'marking', 'queued']);
 
@@ -124,15 +152,17 @@ class SubmissionController extends Controller
             'lms_pushed_at' => null,
         ]);
 
-        // Log AI usage record (mock)
+        // Log AI usage record (mock — but credits ARE charged so the balance flow
+        // can be exercised end-to-end before real Anthropic calls are wired up)
         AiUsage::create([
-            'submission_id'   => $submission->id,
-            'user_id'         => auth()->id(),
-            'tokens_input'    => rand(800, 1500),
-            'tokens_output'   => rand(300, 600),
-            'credits_charged' => 0,
-            'mock_mode'       => true,
-            'status'          => 'success',
+            'submission_id'      => $submission->id,
+            'user_id'            => auth()->id(),
+            'billing_account_id' => $account->id,
+            'tokens_input'       => rand(800, 1500),
+            'tokens_output'      => rand(300, 600),
+            'credits_charged'    => 1,
+            'mock_mode'          => true,
+            'status'             => 'success',
         ]);
 
         AuditLog::record('submission.marked', $submission, [
@@ -882,6 +912,27 @@ class SubmissionController extends Controller
             $generator     = new AssessorDeclarationGenerator();
 
             // ── 1. Assessor Declaration cover page ──────────────────────────
+            // Pull the assessor's saved signature + stamp from their profile so
+            // every Declaration page (and Marking Report) is signed and stamped
+            // automatically. Nullsafe in case this runs without an authed user.
+            $assessor = $submission->assessor ?: auth()->user();
+            $sigAbs   = ($assessor?->signature_path && \Storage::exists($assessor->signature_path))
+                ? \Storage::path($assessor->signature_path) : null;
+            $stampAbs = ($assessor?->stamp_path && \Storage::exists($assessor->stamp_path))
+                ? \Storage::path($assessor->stamp_path) : null;
+
+            // Built-in rubber-stamp payload (static per assessor; date is dynamic).
+            $effectiveEtqa  = $result->etqa_registration ?: ($assessor?->etqa_registration);
+            $stampGenerated = ($assessor?->stamp_use_generated && $assessor?->stamp_holder_name)
+                ? [
+                    'org_top'           => $assessor->stamp_org_top,
+                    'org_bottom'        => $assessor->stamp_org_bottom,
+                    'role'              => $assessor->stamp_role ?: 'ASSESSOR',
+                    'holder_name'       => $assessor->stamp_holder_name,
+                    'etqa_registration' => $effectiveEtqa,
+                ]
+                : null;
+
             $declData = [
                 'qualification_name' => $qualification->name,
                 'assignment_name'    => $submission->assignment->name,
@@ -890,20 +941,27 @@ class SubmissionController extends Controller
                 'learner_name'       => $learner->full_name,
                 'student_no'         => $learner->external_ref ?: $learner->email,
                 'assessor_name'      => $result->assessor_name,
-                'etqa_registration'  => $result->etqa_registration,
+                'etqa_registration'  => $result->etqa_registration ?: ($assessor?->etqa_registration),
                 'assessment_provider'=> $result->assessment_provider ?: config('app.name'),
                 'verdict'            => $result->final_verdict,
                 'date'               => $result->signed_off_at,
+                'signature_path'     => $sigAbs,
+                'stamp_path'         => $stampAbs,
+                'stamp_generated'    => $stampGenerated,
             ];
             // ── 2. Marking Report data ───────────────────────────────────────
             $reportData = [
-                'assignment_name' => $submission->assignment->name,
-                'learner_name'    => $learner->full_name,
-                'student_no'      => $learner->external_ref ?: $learner->email,
-                'assessor_name'   => $result->assessor_name,
-                'date'            => $result->signed_off_at,
-                'questions'       => $result->questions_json ?? [],
-                'verdict'         => $result->final_verdict,
+                'assignment_name'   => $submission->assignment->name,
+                'learner_name'      => $learner->full_name,
+                'student_no'        => $learner->external_ref ?: $learner->email,
+                'assessor_name'     => $result->assessor_name,
+                'etqa_registration' => $result->etqa_registration ?: ($assessor?->etqa_registration),
+                'date'              => $result->signed_off_at,
+                'questions'         => $result->questions_json ?? [],
+                'verdict'           => $result->final_verdict,
+                'signature_path'    => $sigAbs,
+                'stamp_path'        => $stampAbs,
+                'stamp_generated'   => $stampGenerated,
             ];
 
             // ── 3. Build final PDF — front pages drawn natively, submission via FPDI ──

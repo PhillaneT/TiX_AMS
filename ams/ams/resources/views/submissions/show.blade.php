@@ -262,21 +262,49 @@
 
         {{-- Moodle action group — pushed to right when present --}}
         @if($isFromMoodle && $isSignedOff)
-        <div class="ml-auto flex items-center gap-2">
-            @if($submission->lms_pushed_at)
-            <span class="inline-flex items-center gap-1 text-xs text-green-700 font-medium" title="Last pushed to Moodle">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                Pushed {{ $submission->lms_pushed_at->format('d M H:i') }}
-            </span>
+        <div class="ml-auto flex flex-col items-end gap-1.5">
+            <div class="flex items-center gap-2">
+                @if($submission->lms_pushed_at)
+                <span class="inline-flex items-center gap-2 text-xs text-gray-700 font-medium" title="Per-component status of the last push">
+                    <span class="inline-flex items-center gap-0.5">
+                        <span class="w-2 h-2 rounded-full {{ $submission->lms_grade_pushed_at ? 'bg-green-500' : 'bg-gray-300' }}"></span>
+                        Grade
+                    </span>
+                    <span class="inline-flex items-center gap-0.5">
+                        <span class="w-2 h-2 rounded-full {{ $submission->lms_feedback_text_pushed_at ? 'bg-green-500' : 'bg-gray-300' }}"></span>
+                        Comment
+                    </span>
+                    <span class="inline-flex items-center gap-0.5">
+                        <span class="w-2 h-2 rounded-full {{ $submission->lms_feedback_file_pushed_at ? 'bg-green-500' : 'bg-red-400' }}"></span>
+                        PDF
+                    </span>
+                    <span class="text-gray-400">·</span>
+                    <span class="text-gray-500">{{ $submission->lms_pushed_at->format('d M H:i') }}</span>
+                </span>
+                @endif
+                <form method="POST" action="{{ route('integrations.push', [$submission->lms_connection_id, $submission]) }}">
+                    @csrf
+                    <button type="submit"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold transition shadow-sm">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        {{ $submission->lms_pushed_at ? 'Re-push to Moodle' : 'Push to Moodle' }}
+                    </button>
+                </form>
+            </div>
+            @if($submission->lms_last_push_error)
+                <p class="text-xs text-red-700 max-w-md text-right">Last error: {{ $submission->lms_last_push_error }}</p>
             @endif
-            <form method="POST" action="{{ route('integrations.push', [$submission->lms_connection_id, $submission]) }}">
-                @csrf
-                <button type="submit"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold transition shadow-sm">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                    {{ $submission->lms_pushed_at ? 'Re-push to Moodle' : 'Push to Moodle' }}
-                </button>
-            </form>
+            @php $pf = $submission->assignment->lms_preflight_json ?? null; @endphp
+            @if($pf && ! empty($pf['warnings']))
+                <div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 max-w-md text-left">
+                    <p class="font-semibold mb-0.5">Pre-flight warnings:</p>
+                    <ul class="space-y-0.5">
+                        @foreach($pf['warnings'] as $w)
+                            <li>• {{ $w }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
         </div>
         @endif
     </div>
@@ -856,7 +884,7 @@
                     <div>
                         <label class="block text-xs font-semibold text-gray-600 mb-1">ETQA Registration Number</label>
                         <input type="text" name="etqa_registration"
-                               value="{{ old('etqa_registration', $result->etqa_registration) }}"
+                               value="{{ old('etqa_registration', $result->etqa_registration ?: auth()->user()->etqa_registration) }}"
                                placeholder="e.g. 12345"
                                class="w-full rounded border border-gray-300 text-xs px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400">
                     </div>

@@ -93,14 +93,20 @@ class MoodlePushService
             $pdfFilename
         );
 
+        $pdfAttempted = $pdfContents !== null;
+
         if ($advanced['ok']) {
             $method = 'advanced_' . ($advanced['grading_method'] ?? 'unknown');
             Log::info('MoodlePushService: advanced push succeeded', ['method' => $method]);
             return [
-                'ok'     => true,
-                'error'  => null,
-                'method' => $method,
-                'debug'  => "Advanced grading ({$method}) succeeded.",
+                'ok'                   => true,
+                'error'                => null,
+                'method'               => $method,
+                'debug'                => "Advanced grading ({$method}) succeeded.",
+                'grade_pushed'         => true,
+                'feedback_text_pushed' => true,
+                'feedback_file_pushed' => (bool) ($advanced['file_pushed'] ?? false),
+                'pdf_attempted'        => $pdfAttempted,
             ];
         }
 
@@ -110,8 +116,6 @@ class MoodlePushService
         ]);
 
         // ── Step 2: fall back to simple grade + feedback + PDF ────────────────
-        // Use the existing MoodleService::pushGrade() which already handles
-        // the grade payload, feedback comment, and draft-file upload.
         $simple = $this->moodle->pushGrade(
             $moodleAssignId,
             $moodleUserId,
@@ -123,15 +127,28 @@ class MoodlePushService
 
         if (! $simple['ok']) {
             Log::error('MoodlePushService: simple push also failed', ['error' => $simple['error']]);
-            return ['ok' => false, 'error' => $simple['error'], 'method' => null, 'debug' => null];
+            return [
+                'ok'                   => false,
+                'error'                => $simple['error'],
+                'method'               => null,
+                'debug'                => null,
+                'grade_pushed'         => false,
+                'feedback_text_pushed' => false,
+                'feedback_file_pushed' => false,
+                'pdf_attempted'        => $pdfAttempted,
+            ];
         }
 
         Log::info('MoodlePushService: simple push succeeded');
         return [
-            'ok'     => true,
-            'error'  => null,
-            'method' => 'simple',
-            'debug'  => "Simple push used (advanced grading skipped: {$advancedFailReason}).",
+            'ok'                   => true,
+            'error'                => null,
+            'method'               => 'simple',
+            'debug'                => "Simple push used (advanced grading skipped: {$advancedFailReason}).",
+            'grade_pushed'         => true,
+            'feedback_text_pushed' => true,
+            'feedback_file_pushed' => (bool) ($simple['file_pushed'] ?? false),
+            'pdf_attempted'        => $pdfAttempted,
         ];
     }
 
@@ -231,24 +248,29 @@ class MoodlePushService
         if ($pdfContents && $pdfFilename) {
             $draftId = $this->uploadFeedbackFile($pdfContents, $pdfFilename);
             if ($draftId) {
-                $params['plugindata[assignfeedback_file_filemanager]'] = $draftId;
+                // Moodle's assignfeedback_file plugin exposes its draft area under
+                // the key `files_filemanager` (NOT `assignfeedback_file_filemanager`).
+                $params['plugindata[files_filemanager]'] = $draftId;
             }
         }
 
+        $hadFile    = isset($params['plugindata[files_filemanager]']);
         $callResult = $this->apiCall('mod_assign_save_grade', $params);
+        $filePushed = $hadFile && $callResult['ok'];
 
         Log::info('tryPushAdvancedGrade: mod_assign_save_grade result', [
-            'ok'    => $callResult['ok'],
-            'error' => $callResult['error'] ?? null,
-            'had_file' => isset($params['plugindata[assignfeedback_file_filemanager]']),
+            'ok'       => $callResult['ok'],
+            'error'    => $callResult['error'] ?? null,
+            'had_file' => $hadFile,
         ]);
 
         // If the call failed because the file-feedback plugin is not enabled,
         // retry without the file attachment so the grade + feedback still push.
-        if (! $callResult['ok'] && isset($params['plugindata[assignfeedback_file_filemanager]'])) {
+        if (! $callResult['ok'] && $hadFile) {
             $paramsNoFile = $params;
-            unset($paramsNoFile['plugindata[assignfeedback_file_filemanager]']);
+            unset($paramsNoFile['plugindata[files_filemanager]']);
             $callResult = $this->apiCall('mod_assign_save_grade', $paramsNoFile);
+            $filePushed = false;
 
             Log::info('tryPushAdvancedGrade: retry without file', [
                 'ok'    => $callResult['ok'],
@@ -258,6 +280,7 @@ class MoodlePushService
 
         if ($callResult['ok']) {
             $callResult['grading_method'] = $gradingMethod;
+            $callResult['file_pushed']    = $filePushed;
         }
 
         return $callResult;
@@ -317,7 +340,9 @@ class MoodlePushService
 
         $def      = $definitions[0];
         $criteria = match ($method) {
-            'guide'  => $def['guide']['criteria']          ?? [],
+            // Moodle returns these under provider-prefixed keys (guide_criteria,
+            // rubric_criteria); older / 3rd-party builds sometimes use plain "criteria".
+            'guide'  => $def['guide']['guide_criteria']    ?? $def['guide']['criteria']  ?? [],
             'rubric' => $def['rubric']['rubric_criteria']  ?? $def['rubric']['criteria'] ?? [],
             default  => [],
         };
@@ -333,11 +358,14 @@ class MoodlePushService
     /**
      * Build marking guide criterion params for mod_assign_save_grade.
      *
-     * Moodle expects (per criterion i):
-     *   plugindata[marking guide][criteria][i][criterionid]   = <int>
-     *   plugindata[marking guide][criteria][i][score]         = <float>
-     *   plugindata[marking guide][criteria][i][remark]        = <string>
-     *   plugindata[marking guide][criteria][i][remarkformat]  = 0
+     * Moodle expects (per criterion i) — fillings is a multiple-structure (array
+     * of filling objects), so each criterion has exactly one filling at index [0]
+     * which itself repeats criterionid alongside score/remark:
+     *   advancedgradingdata[guide][criteria][i][criterionid]                  = <int>
+     *   advancedgradingdata[guide][criteria][i][fillings][0][criterionid]     = <int>
+     *   advancedgradingdata[guide][criteria][i][fillings][0][score]           = <float>
+     *   advancedgradingdata[guide][criteria][i][fillings][0][remark]          = <string>
+     *   advancedgradingdata[guide][criteria][i][fillings][0][remarkformat]    = 0
      *
      * Score is scaled from our max_marks to Moodle's maxscore so the
      * resulting numeric grade matches across different scale denominators.
@@ -353,8 +381,12 @@ class MoodlePushService
 
             if (! $criterionId || $maxScore <= 0) continue;
 
+            // Match on `description` first — that's the question text the assessor
+            // sees and is what our `criterion` field stores. `shortname` (e.g.
+            // "Weather", "Life") often has no overlap with the question text and
+            // would silently drop criteria from the push.
             $question = $this->matchCriterion(
-                $moodleCrit['shortname'] ?? $moodleCrit['description'] ?? '',
+                $moodleCrit['description'] ?? $moodleCrit['shortname'] ?? '',
                 $questions
             );
 
@@ -369,11 +401,16 @@ class MoodlePushService
             // Clamp to Moodle's declared maximum (never exceed)
             $score = min($score, $maxScore);
 
-            $prefix = "plugindata[marking guide][criteria][{$i}]";
-            $params["{$prefix}[criterionid]"]  = $criterionId;
-            $params["{$prefix}[score]"]         = $score;
-            $params["{$prefix}[remark]"]        = $question['comment'] ?? '';
-            $params["{$prefix}[remarkformat]"]  = 0;
+            // Moodle expects criterion data under `advancedgradingdata` (not `plugindata`).
+            // The method key for a marking guide here is `guide` (no space).
+            // `fillings` is a multiple-structure (array of filling objects), so we
+            // wrap the per-criterion score/remark inside an extra [0] index.
+            $prefix = "advancedgradingdata[guide][criteria][{$i}]";
+            $params["{$prefix}[criterionid]"]                  = $criterionId;
+            $params["{$prefix}[fillings][0][criterionid]"]     = $criterionId;
+            $params["{$prefix}[fillings][0][score]"]           = $score;
+            $params["{$prefix}[fillings][0][remark]"]          = $question['comment'] ?? '';
+            $params["{$prefix}[fillings][0][remarkformat]"]    = 0;
             $i++;
         }
 
@@ -383,11 +420,12 @@ class MoodlePushService
     /**
      * Build rubric criterion params for mod_assign_save_grade.
      *
-     * Moodle expects (per criterion i):
-     *   plugindata[rubric][criteria][i][criterionid]  = <int>
-     *   plugindata[rubric][criteria][i][levelid]      = <int>
-     *   plugindata[rubric][criteria][i][remark]       = <string>
-     *   plugindata[rubric][criteria][i][remarkformat] = 0
+     * Moodle expects (per criterion i) — fillings is a multiple-structure:
+     *   advancedgradingdata[rubric][criteria][i][criterionid]                  = <int>
+     *   advancedgradingdata[rubric][criteria][i][fillings][0][criterionid]     = <int>
+     *   advancedgradingdata[rubric][criteria][i][fillings][0][levelid]         = <int>
+     *   advancedgradingdata[rubric][criteria][i][fillings][0][remark]          = <string>
+     *   advancedgradingdata[rubric][criteria][i][fillings][0][remarkformat]    = 0
      *
      * levelid is chosen as the rubric level whose score (as a % of the
      * criterion's maximum level score) is closest to the assessor's awarded %.
@@ -417,11 +455,15 @@ class MoodlePushService
             $levelId = $this->closestRubricLevelId($levels, $pct);
             if (! $levelId) continue;
 
-            $prefix = "plugindata[rubric][criteria][{$i}]";
-            $params["{$prefix}[criterionid]"] = $criterionId;
-            $params["{$prefix}[levelid]"]     = $levelId;
-            $params["{$prefix}[remark]"]      = $question['comment'] ?? '';
-            $params["{$prefix}[remarkformat]"] = 0;
+            // Moodle expects criterion data under `advancedgradingdata` (not `plugindata`).
+            // `fillings` is a multiple-structure (array of filling objects), so we
+            // wrap the per-criterion levelid/remark inside an extra [0] index.
+            $prefix = "advancedgradingdata[rubric][criteria][{$i}]";
+            $params["{$prefix}[criterionid]"]                  = $criterionId;
+            $params["{$prefix}[fillings][0][criterionid]"]     = $criterionId;
+            $params["{$prefix}[fillings][0][levelid]"]         = $levelId;
+            $params["{$prefix}[fillings][0][remark]"]          = $question['comment'] ?? '';
+            $params["{$prefix}[fillings][0][remarkformat]"]    = 0;
             $i++;
         }
 
@@ -635,13 +677,15 @@ class MoodlePushService
 
     /**
      * Resolve the best available PDF to attach as feedback.
-     * Priority: annotated graded PDF → cover/declaration PDF → raw submission (PDF only).
+     * Priority: combined Declaration + Marked PDF (cover_pdf_path) → bare annotated
+     * PDF → raw submission (PDF only). The combined file is what we hand back to
+     * learners, so it's also what should land in Moodle's Feedback files area.
      */
     private function resolveGradedPdf(Submission $submission, $result): array
     {
         $candidates = [
-            [$result->annotated_pdf_path ?? null, 'graded_' . basename($submission->original_filename)],
             [$result->cover_pdf_path     ?? null, 'feedback_' . basename($submission->original_filename)],
+            [$result->annotated_pdf_path ?? null, 'graded_'   . basename($submission->original_filename)],
         ];
 
         foreach ($candidates as [$path, $name]) {

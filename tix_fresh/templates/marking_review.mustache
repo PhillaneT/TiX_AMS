@@ -1,0 +1,220 @@
+{{!
+    AjanaNova Grader — Assessor marking review screen.
+
+    Context keys supplied by output/marking_review.php:
+      mock_mode                bool
+      learner_name             string
+      module_title             string
+      submission_date          string
+      overall_recommendation   string  — COMPETENT | NOT_YET_COMPETENT | ASSESSOR_REVIEW_REQUIRED
+      overall_is_competent     bool
+      overall_is_nyc           bool
+      overall_is_review        bool
+      confidence               string  — HIGH | MEDIUM | LOW
+      confidence_badge_class   string  — pre-computed Bootstrap badge class
+      questions                array
+      credits_remaining        int
+      sign_off_url             string
+      sesskey                  string
+}}
+
+{{#mock_mode}}
+<div class="alert alert-warning" role="alert">
+    <strong>&#9888; MOCK MODE</strong> &mdash; AI responses are simulated. No credits have been consumed.
+</div>
+{{/mock_mode}}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">
+            {{#str}} ai_marking_results, local_ajananova {{/str}} &mdash; {{learner_name}}
+        </h4>
+        <div class="d-flex align-items-center gap-2">
+            {{#from_cache}}
+            <a href="{{rerun_url}}" class="btn btn-outline-warning btn-sm"
+               onclick="return confirm('This will use 1 credit and replace the current result. Continue?')">
+                &#8635; Re-run AI marking
+            </a>
+            {{/from_cache}}
+            {{#annotated_pdf_url}}
+            <a href="{{annotated_pdf_url}}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                &#128196; View annotated PDF
+            </a>
+            {{/annotated_pdf_url}}
+            <span class="{{confidence_badge_class}}">
+                {{confidence}}
+            </span>
+        </div>
+    </div>
+
+    <div class="card-body">
+
+        <div class="alert
+            {{#overall_is_competent}}alert-success{{/overall_is_competent}}
+            {{#overall_is_nyc}}alert-danger{{/overall_is_nyc}}
+            {{#overall_is_review}}alert-warning{{/overall_is_review}}
+            mb-3" role="alert">
+            <strong>{{#str}} ai_recommendation, local_ajananova {{/str}}:</strong>
+            {{overall_recommendation}}
+        </div>
+
+        <p class="text-muted small mb-3">
+            {{module_title}} &bull; {{submission_date}}
+        </p>
+
+        {{! Score summary bar }}
+        <div class="card mb-4 border-0 bg-light">
+            <div class="card-body py-3">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold text-primary">{{total_awarded}} / {{total_available}}</div>
+                        <div class="small text-muted">Total Marks</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold
+                            {{#overall_is_competent}}text-success{{/overall_is_competent}}
+                            {{#overall_is_nyc}}text-danger{{/overall_is_nyc}}
+                            {{#overall_is_review}}text-warning{{/overall_is_review}}">
+                            {{score_percentage}}%
+                        </div>
+                        <div class="small text-muted">Score</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fs-3 fw-bold
+                            {{#overall_is_competent}}text-success{{/overall_is_competent}}
+                            {{#overall_is_nyc}}text-danger{{/overall_is_nyc}}
+                            {{#overall_is_review}}text-warning{{/overall_is_review}}">
+                            {{#overall_is_competent}}&#10003; C{{/overall_is_competent}}
+                            {{#overall_is_nyc}}&#10007; NYC{{/overall_is_nyc}}
+                            {{#overall_is_review}}&#9888; Review{{/overall_is_review}}
+                        </div>
+                        <div class="small text-muted">AI Recommendation</div>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 8px;">
+                    <div class="progress-bar
+                        {{#overall_is_competent}}bg-success{{/overall_is_competent}}
+                        {{#overall_is_nyc}}bg-danger{{/overall_is_nyc}}
+                        {{#overall_is_review}}bg-warning{{/overall_is_review}}"
+                        role="progressbar"
+                        style="width: {{score_percentage}}%"
+                        aria-valuenow="{{score_percentage}}"
+                        aria-valuemin="0"
+                        aria-valuemax="100">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead class="thead-light">
+                    <tr>
+                        <th>{{#str}} col_q, local_ajananova {{/str}}</th>
+                        <th>{{#str}} col_question, local_ajananova {{/str}}</th>
+                        <th>{{#str}} col_verdict, local_ajananova {{/str}}</th>
+                        <th>{{#str}} col_marks, local_ajananova {{/str}}</th>
+                        <th>{{#str}} col_ai_comment, local_ajananova {{/str}}</th>
+                        <th>{{#str}} col_override, local_ajananova {{/str}}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#questions}}
+                    <tr class="{{#is_competent}}table-success{{/is_competent}}{{#is_nyc}}table-danger{{/is_nyc}}{{#is_flagged}}table-warning{{/is_flagged}}">
+                        <td>{{question_number}}</td>
+                        <td>{{question_ref}}</td>
+                        <td>
+                            {{#is_competent}}<span class="text-success fw-bold">&#10003; {{#str}} competent, local_ajananova {{/str}}</span>{{/is_competent}}
+                            {{#is_nyc}}<span class="text-danger fw-bold">&#10007; {{#str}} not_yet_competent, local_ajananova {{/str}}</span>{{/is_nyc}}
+                            {{#is_flagged}}<span class="text-warning fw-bold">&#9873; {{#str}} flagged, local_ajananova {{/str}}</span>{{/is_flagged}}
+                            {{#assessor_flag}}<br><small class="text-muted">{{flag_reason}}</small>{{/assessor_flag}}
+                        </td>
+                        <td>{{marks_awarded}} / {{marks_available}}</td>
+                        <td><small>{{ai_comment}}</small></td>
+                        <td>
+                            <select name="override[{{question_number}}]"
+                                    class="form-select form-select-sm ajananova-override-select"
+                                    onchange="this.className='form-select form-select-sm ajananova-override-select '+(this.value===''?'':'override-'+this.value.toLowerCase().replace('_yet','').replace('_competent',''))">
+                                <option value="">— AI verdict —</option>
+                                <option value="COMPETENT">&#10003; Competent</option>
+                                <option value="NOT_YET_COMPETENT">&#10007; Not Yet Competent</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {{/questions}}
+                </tbody>
+            </table>
+        </div>
+
+        <form method="post" action="{{sign_off_url}}" class="mt-4" id="ajananova-signoff-form"
+              onsubmit="return ajananovaValidateSignoff()">
+            <input type="hidden" name="sesskey" value="{{sesskey}}">
+            <input type="hidden" name="submissionid" value="{{submissionid}}">
+
+            <div class="row mb-3">
+                <label class="col-sm-3 col-form-label fw-bold">
+                    {{#str}} final_decision, local_ajananova {{/str}}
+                </label>
+                <div class="col-sm-9">
+                    <div class="btn-group" role="group" aria-label="Final verdict">
+                        <input type="radio" class="btn-check" name="final_verdict" id="verdict_c"
+                               value="COMPETENT" autocomplete="off"
+                               {{#overall_is_competent}}checked{{/overall_is_competent}}>
+                        <label class="btn btn-outline-success" for="verdict_c">
+                            &#10003; {{#str}} competent, local_ajananova {{/str}}
+                        </label>
+                        <input type="radio" class="btn-check" name="final_verdict" id="verdict_nyc"
+                               value="NOT_YET_COMPETENT" autocomplete="off"
+                               {{#overall_is_nyc}}checked{{/overall_is_nyc}}>
+                        <label class="btn btn-outline-danger" for="verdict_nyc">
+                            &#10007; {{#str}} not_yet_competent, local_ajananova {{/str}}
+                        </label>
+                    </div>
+                    <div id="ajananova-verdict-error" class="text-danger small mt-1" style="display:none">
+                        Please select a final verdict before signing off.
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label class="col-sm-3 col-form-label fw-bold">
+                    {{#str}} assessor_name, local_ajananova {{/str}}
+                </label>
+                <div class="col-sm-9">
+                    <input type="hidden" name="assessor_name" value="{{assessor_name}}">
+                    <p class="form-control-plaintext">{{assessor_name}}</p>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-sm-9 offset-sm-3">
+                    <button type="submit" class="btn btn-primary">
+                        &#10003; {{#str}} sign_off_confirm, local_ajananova {{/str}}
+                    </button>
+                    <span class="ms-3 text-muted small">
+                        {{#str}} credits_remaining, local_ajananova {{/str}}: {{credits_remaining}}
+                    </span>
+                </div>
+            </div>
+        </form>
+
+        <script>
+        function ajananovaValidateSignoff() {
+            var selected = document.querySelector('input[name="final_verdict"]:checked');
+            var errDiv   = document.getElementById('ajananova-verdict-error');
+            if (!selected) {
+                errDiv.style.display = 'block';
+                return false;
+            }
+            errDiv.style.display = 'none';
+            return true;
+        }
+        </script>
+
+    </div>
+</div>
+
+<style>
+.ajananova-override-select.override-not { border-color: #dc3545; color: #dc3545; }
+.ajananova-override-select.override-competent { border-color: #198754; color: #198754; }
+</style>
